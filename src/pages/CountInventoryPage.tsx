@@ -2,6 +2,7 @@ import {
   Alert,
   AlertDescription,
   AlertIcon,
+  Badge,
   Box,
   Button,
   HStack,
@@ -35,6 +36,7 @@ export default function CountInventoryPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [isPreviewVisible, setIsPreviewVisible] = useState(false);
 
   useEffect(() => {
     void loadSnapshot();
@@ -51,6 +53,7 @@ export default function CountInventoryPage() {
           nextSnapshot.map((item) => [item.productId, item.bookQuantity]),
         ),
       );
+      setIsPreviewVisible(false);
       setErrorMessage("");
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -78,6 +81,46 @@ export default function CountInventoryPage() {
       },
     );
   }, [counts, snapshot]);
+
+  const reconciliationPreview = useMemo(() => {
+    const items = snapshot
+      .map((item) => {
+        const actualQuantity = counts[item.productId] ?? 0;
+        const unitsTaken = Math.max(item.bookQuantity - actualQuantity, 0);
+        const expectedRevenue = unitsTaken * item.sellingPrice;
+        const capitalUsed = unitsTaken * item.averageUnitCost;
+
+        return {
+          productId: item.productId,
+          productName: item.productName,
+          expectedQuantity: item.bookQuantity,
+          actualQuantity,
+          unitsTaken,
+          expectedRevenue,
+          capitalUsed,
+        };
+      })
+      .filter(
+        (item) => item.unitsTaken > 0 || item.actualQuantity !== item.expectedQuantity,
+      )
+      .sort((left, right) => right.expectedRevenue - left.expectedRevenue);
+
+    const unitsTaken = items.reduce((sum, item) => sum + item.unitsTaken, 0);
+    const expectedRevenue = items.reduce((sum, item) => sum + item.expectedRevenue, 0);
+    const capitalUsed = items.reduce((sum, item) => sum + item.capitalUsed, 0);
+
+    return {
+      items,
+      unitsTaken,
+      expectedRevenue,
+      capitalUsed,
+      grossProfit: expectedRevenue - capitalUsed,
+    };
+  }, [counts, snapshot]);
+
+  function handlePreviewReconciliation() {
+    setIsPreviewVisible(true);
+  }
 
   async function handleSaveCount() {
     setIsSaving(true);
@@ -161,7 +204,10 @@ export default function CountInventoryPage() {
               <Input
                 type="date"
                 value={date}
-                onChange={(event) => setDate(event.target.value)}
+                onChange={(event) => {
+                  setDate(event.target.value);
+                  setIsPreviewVisible(false);
+                }}
                 borderColor="black"
                 color="black"
               />
@@ -172,7 +218,10 @@ export default function CountInventoryPage() {
               </Text>
               <Textarea
                 value={notes}
-                onChange={(event) => setNotes(event.target.value)}
+                onChange={(event) => {
+                  setNotes(event.target.value);
+                  setIsPreviewVisible(false);
+                }}
                 placeholder="Optional count notes"
                 borderColor="black"
                 color="black"
@@ -194,12 +243,13 @@ export default function CountInventoryPage() {
                 name={item.productName}
                 expectedQuantity={item.bookQuantity}
                 actualQuantity={counts[item.productId] ?? 0}
-                onChange={(value) =>
+                onChange={(value) => {
                   setCounts((current) => ({
                     ...current,
                     [item.productId]: value,
-                  }))
-                }
+                  }));
+                  setIsPreviewVisible(false);
+                }}
               />
             ))}
       </Stack>
@@ -231,11 +281,109 @@ export default function CountInventoryPage() {
             <Text color="canvas.700">Counted retail value</Text>
             <Text fontWeight="800">{formatCurrency(totals.actualValue)}</Text>
           </HStack>
-          <Button onClick={() => void handleSaveCount()} isLoading={isSaving}>
-            Reconcile inventory
+          <Button onClick={handlePreviewReconciliation} isDisabled={isLoading || snapshot.length === 0}>
+            Preview reconciliation
           </Button>
         </Stack>
       </Box>
+
+      {isPreviewVisible ? (
+        <Box
+          bg="rgba(255,255,255,0.8)"
+          borderRadius="28px"
+          p={{ base: 4, md: 5 }}
+          border="1px solid"
+          borderColor="whiteAlpha.700"
+        >
+          <Stack spacing={4}>
+            <HStack justify="space-between" align="start" flexWrap="wrap">
+              <Box>
+                <Text fontWeight="800" fontSize="xl">
+                  Reconciliation preview
+                </Text>
+                <Text color="canvas.700">
+                  This preview has not saved anything yet.
+                </Text>
+              </Box>
+              <Badge colorScheme="orange" px={3} py={1} borderRadius="full">
+                Pending confirmation
+              </Badge>
+            </HStack>
+            <HStack justify="space-between">
+              <Text color="canvas.700">Bottles taken</Text>
+              <Text fontWeight="800">{reconciliationPreview.unitsTaken}</Text>
+            </HStack>
+            <HStack justify="space-between">
+              <Text color="canvas.700">Expected revenue</Text>
+              <Text fontWeight="800">
+                {formatCurrency(reconciliationPreview.expectedRevenue)}
+              </Text>
+            </HStack>
+            <HStack justify="space-between">
+              <Text color="canvas.700">Capital of sold goods</Text>
+              <Text fontWeight="800">
+                {formatCurrency(reconciliationPreview.capitalUsed)}
+              </Text>
+            </HStack>
+            <HStack justify="space-between">
+              <Text color="canvas.700">Gross profit</Text>
+              <Text fontWeight="800">
+                {formatCurrency(reconciliationPreview.grossProfit)}
+              </Text>
+            </HStack>
+
+            <Box
+              bg="whiteAlpha.900"
+              borderRadius="24px"
+              p={4}
+              border="1px solid"
+              borderColor="blackAlpha.100"
+            >
+              <Stack spacing={3}>
+                <Text fontWeight="700">Product breakdown</Text>
+                {reconciliationPreview.items.length === 0 ? (
+                  <Text color="canvas.700">
+                    No unit movement was detected from this count.
+                  </Text>
+                ) : (
+                  reconciliationPreview.items.map((item) => (
+                    <HStack key={item.productId} justify="space-between" align="start">
+                      <Box minW={0}>
+                        <Text fontWeight="700">{item.productName}</Text>
+                        <Text fontSize="sm" color="canvas.700">
+                          {item.expectedQuantity} expected, {item.actualQuantity} counted
+                        </Text>
+                      </Box>
+                      <Box textAlign="right" flexShrink={0}>
+                        <Text fontWeight="800">{item.unitsTaken} taken</Text>
+                        <Text fontSize="sm" color="canvas.700">
+                          {formatCurrency(item.expectedRevenue)}
+                        </Text>
+                      </Box>
+                    </HStack>
+                  ))
+                )}
+              </Stack>
+            </Box>
+
+            <Alert status="info" borderRadius="24px">
+              <AlertIcon />
+              <AlertDescription>
+                Confirming will create one inventory count and one reconciliation record.
+              </AlertDescription>
+            </Alert>
+
+            <HStack spacing={3} flexWrap="wrap">
+              <Button onClick={() => void handleSaveCount()} isLoading={isSaving}>
+                Confirm and save reconciliation
+              </Button>
+              <Button variant="outline" onClick={() => setIsPreviewVisible(false)}>
+                Back to count
+              </Button>
+            </HStack>
+        </Stack>
+      </Box>
+      ) : null}
     </Stack>
   );
 }
