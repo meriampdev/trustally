@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -14,16 +14,17 @@
 }
 
 html {
-  background: #f7f0e0;
+  background: #0b1726;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   background:
-    radial-gradient(circle at top, rgba(200, 140, 29, 0.2), transparent 30%),
-    linear-gradient(180deg, #fbf5e8 0%, #f2e7d0 100%);
-  color: #1e1914;
+    radial-gradient(circle at top, rgba(53, 189, 255, 0.28), transparent 26%),
+    radial-gradient(circle at 18% 18%, rgba(120, 223, 255, 0.14), transparent 30%),
+    linear-gradient(180deg, #102134 0%, #0b1726 54%, #07101a 100%);
+  color: #f3fbff;
   font-family: "Avenir Next", "Segoe UI", sans-serif;
 }
 

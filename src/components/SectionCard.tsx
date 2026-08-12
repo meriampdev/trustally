@@ -10,13 +10,13 @@ interface SectionCardProps extends BoxProps {
 export function SectionCard({ title, eyebrow, children, ...boxProps }: SectionCardProps) {
   return (
     <Box
-      bg="rgba(255,255,255,0.86)"
+      bg="linear-gradient(180deg, rgba(20, 43, 67, 0.9) 0%, rgba(13, 29, 46, 0.88) 100%)"
       borderRadius="30px"
       p={{ base: 4, md: 5, xl: 6 }}
       border="1px solid"
-      borderColor="whiteAlpha.700"
+      borderColor="rgba(142, 182, 215, 0.18)"
       backdropFilter="blur(18px)"
-      shadow="0 18px 45px rgba(30, 25, 20, 0.08)"
+      shadow="0 22px 50px rgba(1, 10, 20, 0.36)"
       {...boxProps}
     >
       {eyebrow ? (

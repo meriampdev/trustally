@@ -139,11 +139,13 @@ export function AppShell({ children }: AppShellProps) {
         <VStack
           align="stretch"
           spacing={5}
-          bg="rgba(24, 20, 16, 0.94)"
+          bg="linear-gradient(180deg, rgba(9, 28, 45, 0.98) 0%, rgba(15, 40, 62, 0.94) 48%, rgba(19, 66, 101, 0.9) 100%)"
           color="white"
           borderRadius="30px"
           p={5}
-          shadow="2xl"
+          border="1px solid"
+          borderColor="whiteAlpha.120"
+          boxShadow="0 24px 60px rgba(1, 10, 20, 0.55)"
         >
           <Box>
             <Text fontSize="xs" textTransform="uppercase" letterSpacing="0.18em" opacity={0.8}>
@@ -175,7 +177,14 @@ export function AppShell({ children }: AppShellProps) {
               );
             })}
           </VStack>
-          <Box mt="auto" bg="whiteAlpha.160" borderRadius="24px" p={4}>
+          <Box
+            mt="auto"
+            bg="linear-gradient(180deg, rgba(20, 54, 84, 0.82) 0%, rgba(11, 30, 48, 0.92) 100%)"
+            borderRadius="24px"
+            p={4}
+            border="1px solid"
+            borderColor="whiteAlpha.120"
+          >
             <Text fontWeight="700" wordBreak="break-word">
               {user?.email ?? "Unknown user"}
             </Text>
@@ -200,7 +209,18 @@ export function AppShell({ children }: AppShellProps) {
         pb={{ base: "calc(var(--bottom-nav-height) + var(--safe-area-bottom) + 16px)", lg: 10 }}
       >
         {!isOnline ? (
-          <Box position="sticky" top="0" zIndex="banner" bg="canvas.900" color="white" px={4} py={3}>
+          <Box
+            position="sticky"
+            top="0"
+            zIndex="banner"
+            bg="rgba(12, 31, 49, 0.94)"
+            color="white"
+            px={4}
+            py={3}
+            backdropFilter="blur(14px)"
+            borderBottom="1px solid"
+            borderColor="whiteAlpha.120"
+          >
             <Text fontWeight="700">Offline mode is on. Drafts stay on this device and will sync later.</Text>
           </Box>
         ) : null}
@@ -224,8 +244,8 @@ export function AppShell({ children }: AppShellProps) {
                     value={currentLocationId ?? ""}
                     onChange={(event) => void handleLocationChange(event.target.value)}
                     isDisabled={isLoadingLocations || isSwitchingLocation}
-                    bg="white"
-                    borderColor="canvas.300"
+                    bg="rgba(19, 40, 63, 0.9)"
+                    borderColor="rgba(142, 182, 215, 0.22)"
                     fontWeight="700"
                   >
                     {locations.map((item) => (
@@ -252,14 +272,16 @@ export function AppShell({ children }: AppShellProps) {
         zIndex="docked"
       >
         <Flex
-          bg="rgba(24, 20, 16, 0.96)"
+          bg="linear-gradient(180deg, rgba(9, 28, 45, 0.98) 0%, rgba(16, 49, 76, 0.92) 100%)"
           color="white"
           borderRadius="30px"
           px={2}
           py={2}
           align="end"
           justify="space-between"
-          shadow="2xl"
+          border="1px solid"
+          borderColor="whiteAlpha.120"
+          boxShadow="0 20px 48px rgba(1, 10, 20, 0.52)"
         >
           {navItems.map((item) => {
             const active =

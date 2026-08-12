@@ -7,34 +7,35 @@ export const theme = extendTheme({
   },
   colors: {
     brand: {
-      50: "#fff9eb",
-      100: "#f8e8b6",
-      200: "#f1d17c",
-      300: "#e5b34e",
-      400: "#c88c1d",
-      500: "#9f6a13",
-      600: "#774d0d",
-      700: "#513306",
-      800: "#2e1b02",
-      900: "#140a00",
+      50: "#dff7ff",
+      100: "#aee7ff",
+      200: "#79d4ff",
+      300: "#46c1ff",
+      400: "#12a7ef",
+      500: "#0b87c4",
+      600: "#086693",
+      700: "#054662",
+      800: "#02283a",
+      900: "#01111c",
     },
     canvas: {
-      50: "#fffdf8",
-      100: "#f7f0e0",
-      200: "#eadfc7",
-      700: "#64584a",
-      900: "#1e1914",
+      50: "#17314d",
+      100: "#0b1726",
+      200: "#18314d",
+      300: "#2b4d74",
+      700: "#a4c6e1",
+      900: "#f3fbff",
     },
     honesty: {
-      50: "#eefdf4",
-      400: "#2f9a60",
-      500: "#23764a",
-      700: "#16472d",
+      50: "#dffdf8",
+      400: "#34d5b4",
+      500: "#23a98f",
+      700: "#126659",
     },
     caution: {
-      50: "#fff3ed",
-      400: "#d36a2e",
-      600: "#973f14",
+      50: "#fff1ee",
+      400: "#ff8966",
+      600: "#d75932",
     },
   },
   fonts: {
@@ -53,7 +54,7 @@ export const theme = extendTheme({
         color: "canvas.900",
         bg: "canvas.100",
         backgroundImage:
-          "radial-gradient(circle at top, rgba(200, 140, 29, 0.2), transparent 30%), linear-gradient(180deg, #fbf5e8 0%, #f2e7d0 100%)",
+          "radial-gradient(circle at top, rgba(53, 189, 255, 0.28), transparent 26%), radial-gradient(circle at 20% 20%, rgba(120, 223, 255, 0.14), transparent 30%), linear-gradient(180deg, #102134 0%, #0b1726 54%, #07101a 100%)",
         backgroundAttachment: "fixed",
       },
     },
@@ -69,18 +70,18 @@ export const theme = extendTheme({
       variants: {
         solid: {
           bg: "brand.400",
-          color: "white",
+          color: "canvas.900",
           _hover: { bg: "brand.500" },
           _active: { bg: "brand.600" },
         },
         outline: {
-          bg: "rgba(255,255,255,0.72)",
+          bg: "rgba(23, 49, 77, 0.72)",
           color: "canvas.900",
           border: "1px solid",
-          borderColor: "canvas.200",
+          borderColor: "rgba(142, 182, 215, 0.22)",
           _hover: {
-            bg: "white",
-            borderColor: "brand.200",
+            bg: "rgba(28, 59, 91, 0.96)",
+            borderColor: "brand.300",
           },
           _active: {
             bg: "canvas.50",
@@ -89,21 +90,21 @@ export const theme = extendTheme({
         ghost: {
           color: "canvas.900",
           _hover: {
-            bg: "blackAlpha.50",
+            bg: "whiteAlpha.120",
           },
           _active: {
-            bg: "blackAlpha.100",
+            bg: "whiteAlpha.200",
           },
         },
         subtle: {
-          bg: "rgba(255,255,255,0.62)",
+          bg: "rgba(24, 50, 78, 0.84)",
           color: "canvas.700",
           _hover: {
-            bg: "rgba(255,255,255,0.88)",
+            bg: "rgba(31, 62, 95, 0.98)",
             color: "canvas.900",
           },
           _active: {
-            bg: "white",
+            bg: "canvas.50",
           },
         },
       },
@@ -112,14 +113,14 @@ export const theme = extendTheme({
       variants: {
         outline: {
           field: {
-            bg: "rgba(255,255,255,0.92)",
-            borderColor: "canvas.200",
+            bg: "rgba(19, 40, 63, 0.9)",
+            borderColor: "rgba(142, 182, 215, 0.22)",
             color: "canvas.900",
             _placeholder: {
               color: "canvas.700",
             },
             _hover: {
-              borderColor: "brand.200",
+              borderColor: "brand.300",
             },
           },
         },
@@ -137,11 +138,11 @@ export const theme = extendTheme({
       variants: {
         outline: {
           field: {
-            bg: "rgba(255,255,255,0.92)",
-            borderColor: "canvas.200",
+            bg: "rgba(19, 40, 63, 0.9)",
+            borderColor: "rgba(142, 182, 215, 0.22)",
             color: "canvas.900",
             _hover: {
-              borderColor: "brand.200",
+              borderColor: "brand.300",
             },
           },
         },
@@ -153,14 +154,14 @@ export const theme = extendTheme({
     Textarea: {
       variants: {
         outline: {
-          bg: "rgba(255,255,255,0.92)",
-          borderColor: "canvas.200",
+          bg: "rgba(19, 40, 63, 0.9)",
+          borderColor: "rgba(142, 182, 215, 0.22)",
           color: "canvas.900",
           _placeholder: {
             color: "canvas.700",
           },
           _hover: {
-            borderColor: "brand.200",
+            borderColor: "brand.300",
           },
         },
       },

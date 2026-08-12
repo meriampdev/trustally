@@ -123,8 +123,10 @@ export default function LoginPage() {
           borderRadius="32px"
           p={6}
           color="white"
-          bg="linear-gradient(135deg, #2c1b0f 0%, #7d5413 45%, #d9a026 100%)"
-          shadow="xl"
+          bg="linear-gradient(135deg, rgba(3, 25, 42, 0.98) 0%, rgba(10, 74, 122, 0.94) 42%, rgba(78, 198, 255, 0.92) 100%)"
+          border="1px solid"
+          borderColor="whiteAlpha.160"
+          boxShadow="0 24px 58px rgba(1, 10, 20, 0.4)"
         >
           <Text fontSize="xs" textTransform="uppercase" letterSpacing="0.18em" opacity={0.85}>
             Trustally
@@ -137,7 +139,14 @@ export default function LoginPage() {
           </Text>
         </Box>
 
-        <Box bg="rgba(255,255,255,0.86)" borderRadius="30px" p={5}>
+        <Box
+          bg="linear-gradient(180deg, rgba(12, 25, 40, 0.92) 0%, rgba(8, 18, 29, 0.9) 100%)"
+          borderRadius="30px"
+          p={5}
+          border="1px solid"
+          borderColor="rgba(142, 182, 215, 0.18)"
+          boxShadow="0 18px 44px rgba(1, 10, 20, 0.3)"
+        >
           <HStack spacing={3} mb={5}>
             <ModeButton active={mode === "sign-in"} label="Sign in" onClick={() => setMode("sign-in")} />
             <ModeButton active={mode === "sign-up"} label="Create account" onClick={() => setMode("sign-up")} />
