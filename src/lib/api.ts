@@ -1,0 +1,512 @@
+import { supabase } from "../utils/supabase";
+import {
+  AccessibleLocation,
+  BoxCheckCompletion,
+  CashMovement,
+  CheckBoxCountInput,
+  CheckBoxDraftPayload,
+  CheckBoxPreview,
+  CheckBoxRefillInput,
+  CycleDetail,
+  CycleStatus,
+  HistoryFilter,
+  HistoryItem,
+  HomeDashboard,
+  NonSaleRemovalInput,
+  PayLaterBalance,
+  PaymentReceipt,
+  Product,
+  ProductUpsertInput,
+  ReportsSnapshot,
+  Settings,
+  SetupProductInput,
+  StockAdditionLineInput,
+} from "./types";
+
+export async function fetchHomeDashboard(selectedLocationId?: string | null) {
+  const dashboard = await rpc<Partial<HomeDashboard> | Record<string, unknown> | null>(
+    "get_home_dashboard",
+    selectedLocationId ? { p_location_id: selectedLocationId } : undefined,
+  );
+
+  return normalizeHomeDashboard(dashboard);
+}
+
+export async function fetchProducts() {
+  return rpc<Product[]>("list_products");
+}
+
+export async function fetchAccessibleLocations() {
+  try {
+    return await rpc<AccessibleLocation[]>("list_accessible_locations");
+  } catch (error) {
+    if (isMissingRpcError(error, "list_accessible_locations")) {
+      const { data, error: queryError } = await supabase
+        .from("locations")
+        .select("id, name")
+        .order("created_at", { ascending: true });
+
+      if (queryError) {
+        throw queryError;
+      }
+
+      return (data ?? []).map((location, index) => ({
+        id: location.id,
+        name: location.name,
+        role: null,
+        isCurrent: index === 0,
+      }));
+    }
+
+    throw error;
+  }
+}
+
+export async function setCurrentLocation(locationId: string) {
+  try {
+    return await rpc<AccessibleLocation>("set_current_location", {
+      p_location_id: locationId,
+    });
+  } catch (error) {
+    if (isMissingRpcError(error, "set_current_location")) {
+      throw new Error(
+        "The latest Trustally database migration has not been applied yet, so switching and remembering locations is not available on this database.",
+      );
+    }
+
+    throw error;
+  }
+}
+
+export async function startInitialTracking(input: {
+  locationName: string;
+  products: SetupProductInput[];
+  idempotencyKey: string;
+}) {
+  return rpc<{ locationId: string; cycleId: string }>("start_initial_tracking", {
+    p_location_name: input.locationName,
+    p_lines: input.products,
+    p_idempotency_key: input.idempotencyKey,
+  });
+}
+
+export async function addStockToActiveCycle(input: {
+  lines: StockAdditionLineInput[];
+  note?: string;
+  idempotencyKey: string;
+}) {
+  return rpc<{ stockAdditionId: string; cycleId: string }>("add_stock_to_active_cycle", {
+    p_lines: input.lines,
+    p_note: input.note ?? null,
+    p_idempotency_key: input.idempotencyKey,
+  });
+}
+
+export async function fetchCheckBoxDraft() {
+  return rpc<CheckBoxDraftPayload | null>("get_check_box_draft");
+}
+
+export async function previewBoxCheck(input: {
+  cashCollected: string;
+  gcashCollected: string;
+  mayaCollected: string;
+  counts: CheckBoxCountInput[];
+  nonSaleRemovals: NonSaleRemovalInput[];
+}) {
+  return rpc<CheckBoxPreview>("preview_box_check", {
+    p_cash_collected: input.cashCollected,
+    p_gcash_collected: input.gcashCollected,
+    p_maya_collected: input.mayaCollected,
+    p_counts: input.counts,
+    p_non_sale_removals: input.nonSaleRemovals,
+  });
+}
+
+export async function completeBoxCheck(input: {
+  cashCollected: string;
+  gcashCollected: string;
+  mayaCollected: string;
+  counts: CheckBoxCountInput[];
+  nonSaleRemovals: NonSaleRemovalInput[];
+  refillItems: CheckBoxRefillInput[];
+  note?: string;
+  idempotencyKey: string;
+}) {
+  return rpc<BoxCheckCompletion>("complete_box_check", {
+    p_cash_collected: input.cashCollected,
+    p_gcash_collected: input.gcashCollected,
+    p_maya_collected: input.mayaCollected,
+    p_counts: input.counts,
+    p_non_sale_removals: input.nonSaleRemovals,
+    p_refill_items: input.refillItems,
+    p_note: input.note ?? null,
+    p_idempotency_key: input.idempotencyKey,
+  });
+}
+
+export async function recordCycleDifference(input: {
+  cycleId: string;
+  resolutionType: string;
+  amount?: string;
+  customerLabel?: string;
+  itemsSummary?: string;
+  dueDate?: string;
+  note?: string;
+}) {
+  try {
+    return await rpc<{
+      id: string;
+      cycleId: string;
+      resolutionType: string;
+      amount: number;
+      customerLabel?: string | null;
+      itemsSummary?: string | null;
+      dueDate?: string | null;
+      note?: string | null;
+      payLaterBalanceId?: string | null;
+    }>("record_cycle_difference", {
+      p_cycle_id: input.cycleId,
+      p_resolution_type: input.resolutionType,
+      p_amount: input.amount ?? "0",
+      p_customer_label: input.customerLabel ?? null,
+      p_items_summary: input.itemsSummary ?? null,
+      p_due_date: input.dueDate ? new Date(input.dueDate).toISOString() : null,
+      p_note: input.note ?? null,
+    });
+  } catch (error) {
+    if (isMissingRpcError(error, "record_cycle_difference")) {
+      throw new Error(
+        "The latest Trustally database migration has not been applied yet, so pay-later recording is not available on this database.",
+      );
+    }
+
+    throw error;
+  }
+}
+
+export async function fetchOutstandingBalances() {
+  try {
+    return await rpc<PayLaterBalance[]>("list_open_pay_later_balances");
+  } catch (error) {
+    if (isMissingRpcError(error, "list_open_pay_later_balances")) {
+      return [];
+    }
+
+    throw error;
+  }
+}
+
+export async function recordPaymentReceipt(input: {
+  amount: string;
+  method: string;
+  receivedAt?: string;
+  paymentTiming: string;
+  note?: string;
+  allocations?: Array<{ payLaterBalanceId: string; amount: string }>;
+  autoAllocateOldest?: boolean;
+  relatedCycleId?: string | null;
+}) {
+  return rpc<PaymentReceipt>("record_payment_receipt", {
+    p_amount: input.amount,
+    p_method: input.method,
+    p_received_at: input.receivedAt ? new Date(input.receivedAt).toISOString() : null,
+    p_payment_timing: input.paymentTiming,
+    p_note: input.note ?? null,
+    p_allocations: input.allocations ?? [],
+    p_auto_allocate_oldest: input.autoAllocateOldest ?? false,
+    p_related_cycle_id: input.relatedCycleId ?? null,
+  });
+}
+
+export async function fetchCashMovements() {
+  try {
+    return await rpc<CashMovement[]>("list_cash_movements");
+  } catch (error) {
+    if (isMissingRpcError(error, "list_cash_movements")) {
+      return [];
+    }
+
+    throw error;
+  }
+}
+
+export async function recordCashMovement(input: {
+  type: string;
+  amount: string;
+  person?: string;
+  note?: string;
+  occurredAt?: string;
+}) {
+  return rpc<CashMovement>("record_cash_movement", {
+    p_type: input.type,
+    p_amount: input.amount,
+    p_person: input.person ?? null,
+    p_note: input.note ?? null,
+    p_occurred_at: input.occurredAt ? new Date(input.occurredAt).toISOString() : null,
+  });
+}
+
+export async function fetchHistoryFeed(filter: HistoryFilter, limit = 20, offset = 0) {
+  return rpc<HistoryItem[]>("get_history_feed", {
+    p_filter: filter,
+    p_limit: limit,
+    p_offset: offset,
+  });
+}
+
+export async function fetchCycleDetail(cycleId: string) {
+  return rpc<CycleDetail>("get_cycle_detail", {
+    p_cycle_id: cycleId,
+  });
+}
+
+export async function fetchReportsSnapshot(rangeKey: string) {
+  const [snapshot, balances] = await Promise.all([
+    rpc<Partial<ReportsSnapshot> | null>("get_reports_snapshot", {
+      p_range_key: rangeKey,
+      p_start_date: null,
+      p_end_date: null,
+    }),
+    fetchOutstandingBalances(),
+  ]);
+
+  return normalizeReportsSnapshot(snapshot, rangeKey, balances);
+}
+
+export async function fetchSettings() {
+  return rpc<Settings>("get_settings");
+}
+
+export async function updateSettings(input: Settings) {
+  return rpc<Settings>("update_settings", {
+    p_reduced_motion: input.reducedMotion,
+    p_target_coverage_days: input.targetCoverageDays,
+    p_check_reminder_days: input.checkReminderDays,
+    p_low_stock_reminders: input.lowStockReminders,
+    p_honesty_excellent_min: input.honestyExcellentMin,
+    p_honesty_good_min: input.honestyGoodMin,
+    p_honesty_attention_min: input.honestyAttentionMin,
+  });
+}
+
+export async function upsertProduct(input: ProductUpsertInput) {
+  return rpc<Product>("upsert_product", {
+    p_id: input.id ?? null,
+    p_name: input.name,
+    p_brand: input.brand ?? null,
+    p_variant: input.variant ?? null,
+    p_volume: input.volume ?? null,
+    p_unit: input.unit ?? null,
+    p_category: input.category ?? null,
+    p_sku: input.sku ?? null,
+    p_default_unit_cost: input.defaultUnitCost,
+    p_current_selling_price: input.currentSellingPrice,
+    p_active: input.active,
+  });
+}
+
+async function rpc<T>(name: string, args?: Record<string, unknown>) {
+  const { data, error } = await supabase.rpc(name, args);
+
+  if (error) {
+    throw error;
+  }
+
+  return data as T;
+}
+
+function isMissingRpcError(error: unknown, functionName: string) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    "message" in error &&
+    (error as { code?: string }).code === "PGRST202" &&
+    typeof (error as { message?: string }).message === "string" &&
+    (error as { message: string }).message.includes(functionName)
+  );
+}
+
+function normalizeReportsSnapshot(
+  snapshot: Partial<ReportsSnapshot> | null,
+  rangeKey: string,
+  balances: PayLaterBalance[] = [],
+): ReportsSnapshot {
+  const source = (snapshot ?? {}) as Record<string, unknown>;
+  const legacyMetrics =
+    typeof source.metrics === "object" && source.metrics !== null
+      ? (source.metrics as Record<string, unknown>)
+      : null;
+  const legacyItems = Array.isArray(source.items)
+    ? source.items.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+    : [];
+  const expectedVsCollected = Array.isArray(snapshot?.expectedVsCollected)
+    ? snapshot.expectedVsCollected
+    : legacyItems.map((item, index) => ({
+        label:
+          typeof item.label === "string"
+            ? item.label
+            : typeof item.dateLabel === "string"
+              ? item.dateLabel
+              : typeof item.periodLabel === "string"
+                ? item.periodLabel
+                : typeof item.date === "string"
+                  ? item.date
+                  : `Period ${index + 1}`,
+        expectedRevenue:
+          toNumber(item.expectedRevenue) ||
+          toNumber(item.totalExpectedRevenue) ||
+          toNumber(item.expectedSales) ||
+          toNumber(item.expected),
+        totalCollected:
+          toNumber(item.totalCollected) ||
+          toNumber(item.paymentsReceived) ||
+          toNumber(item.totalPaymentsReceived) ||
+          toNumber(item.collected),
+      }))
+  const bottlesTaken = Array.isArray(snapshot?.bottlesTaken) ? snapshot.bottlesTaken : [];
+  const honestyTrend = Array.isArray(snapshot?.honestyTrend) ? snapshot.honestyTrend : [];
+  const accountedTrend = Array.isArray(snapshot?.accountedTrend) ? snapshot.accountedTrend : [];
+  const productPerformance = Array.isArray(snapshot?.productPerformance)
+    ? snapshot.productPerformance
+    : [];
+  const legacyExpectedRevenue = toNumber(legacyMetrics?.totalExpectedRevenue);
+  const legacyPaymentsReceived = toNumber(legacyMetrics?.totalPaymentsReceived);
+  const legacyCollectionRate =
+    legacyMetrics?.collectionRate == null ? null : toNumber(legacyMetrics.collectionRate);
+  const legacyGrossProfit = toNumber(legacyMetrics?.grossProfit);
+  const fallbackOutstandingAmount = balances.reduce((sum, balance) => sum + balance.remainingAmount, 0);
+  const hasLegacyMetricsShape = legacyMetrics !== null || Array.isArray(source.items);
+
+  return {
+    rangeKey: snapshot?.rangeKey ?? rangeKey,
+    summary: {
+      completedCycles: snapshot?.summary?.completedCycles ?? expectedVsCollected.length,
+      expectedRevenue: snapshot?.summary?.expectedRevenue ?? legacyExpectedRevenue,
+      totalCollected: snapshot?.summary?.totalCollected ?? legacyPaymentsReceived,
+      paymentsReceived: snapshot?.summary?.paymentsReceived ?? legacyPaymentsReceived,
+      differenceAmount: snapshot?.summary?.differenceAmount ?? 0,
+      averageHonestyRate: snapshot?.summary?.averageHonestyRate ?? legacyCollectionRate,
+      averageCollectionMatchRate:
+        snapshot?.summary?.averageCollectionMatchRate ?? legacyCollectionRate,
+      knownPayLater:
+        snapshot?.summary?.knownPayLater ??
+        (hasLegacyMetricsShape ? fallbackOutstandingAmount : 0),
+      accountedAmount: snapshot?.summary?.accountedAmount ?? 0,
+      accountedRate: snapshot?.summary?.accountedRate ?? null,
+      settledAmount: snapshot?.summary?.settledAmount ?? 0,
+      settledRate: snapshot?.summary?.settledRate ?? null,
+      outstandingAmount:
+        snapshot?.summary?.outstandingAmount ??
+        (hasLegacyMetricsShape ? fallbackOutstandingAmount : 0),
+      unaccountedAmount: snapshot?.summary?.unaccountedAmount ?? 0,
+      totalShort: snapshot?.summary?.totalShort ?? 0,
+      totalOver: snapshot?.summary?.totalOver ?? 0,
+      bottlesTaken: snapshot?.summary?.bottlesTaken ?? 0,
+      cogs: snapshot?.summary?.cogs ?? 0,
+      grossProfit: snapshot?.summary?.grossProfit ?? legacyGrossProfit,
+      grossMargin: snapshot?.summary?.grossMargin ?? null,
+      averageCycleDurationHours: snapshot?.summary?.averageCycleDurationHours ?? null,
+      averageBottlesPerDay: snapshot?.summary?.averageBottlesPerDay ?? null,
+      averageRevenuePerDay: snapshot?.summary?.averageRevenuePerDay ?? null,
+      averageRevenuePerCycle: snapshot?.summary?.averageRevenuePerCycle ?? null,
+    },
+    expectedVsCollected,
+    bottlesTaken,
+    honestyTrend,
+    accountedTrend,
+    productPerformance,
+  };
+}
+
+function normalizeHomeDashboard(
+  dashboard: Partial<HomeDashboard> | Record<string, unknown> | null,
+): HomeDashboard {
+  const source = dashboard ?? {};
+  const hasLegacyFields =
+    "collectionRate" in source ||
+    "inventoryValue" in source ||
+    "currentInventoryUnits" in source ||
+    "currentCashInBox" in source ||
+    "salesThisMonth" in source;
+
+  const hasSetup =
+    typeof (source as HomeDashboard).hasSetup === "boolean"
+      ? Boolean((source as HomeDashboard).hasSetup)
+      : Object.keys(source).length > 0 || hasLegacyFields;
+
+  const sourceCurrentCycle = (source as HomeDashboard).currentCycle;
+
+  const currentCycle = sourceCurrentCycle?.startedAt
+    ? {
+        id: sourceCurrentCycle.id ?? "legacy-cycle",
+        cycleNumber: sourceCurrentCycle.cycleNumber ?? 1,
+        status: normalizeCycleStatus(sourceCurrentCycle.status),
+        startedAt: sourceCurrentCycle.startedAt,
+        lastCheckedAt: sourceCurrentCycle.lastCheckedAt ?? null,
+        startingBoxStock:
+          sourceCurrentCycle.startingBoxStock ??
+          toNumber((source as Record<string, unknown>).currentInventoryUnits),
+        currentAvailableStock:
+          sourceCurrentCycle.currentAvailableStock ??
+          toNumber((source as Record<string, unknown>).currentInventoryUnits),
+        retailValue:
+          sourceCurrentCycle.retailValue ??
+          toNumber((source as Record<string, unknown>).inventoryValue),
+        cashRemoved: sourceCurrentCycle.cashRemoved ?? 0,
+        cashReturned: sourceCurrentCycle.cashReturned ?? 0,
+        estimatedPhysicalCash: sourceCurrentCycle.estimatedPhysicalCash ?? null,
+        estimatedRemaining: sourceCurrentCycle.estimatedRemaining ?? null,
+        estimatedRetailValue:
+          sourceCurrentCycle.estimatedRetailValue ??
+          toNumber((source as Record<string, unknown>).inventoryValue),
+      }
+    : null;
+
+  return {
+    hasSetup,
+    locationId: (source as HomeDashboard).locationId ?? null,
+    locationName: (source as HomeDashboard).locationName ?? "Your box",
+    role: (source as HomeDashboard).role ?? null,
+    currentCycle,
+    recentResult: normalizeHomeRecentResult((source as HomeDashboard).recentResult),
+    whatToBring: (source as HomeDashboard).whatToBring ?? [],
+    alerts: (source as HomeDashboard).alerts ?? [],
+  };
+}
+
+function normalizeHomeRecentResult(result?: HomeDashboard["recentResult"] | null) {
+  if (!result) {
+    return null;
+  }
+
+  return {
+    ...result,
+    immediatePayments: result.immediatePayments ?? result.totalCollected ?? 0,
+    collectionMatchRate: result.collectionMatchRate ?? result.honestyRate ?? null,
+    knownPayLater: result.knownPayLater ?? 0,
+    accountedAmount: result.accountedAmount ?? result.totalCollected ?? 0,
+    accountedRate: result.accountedRate ?? result.honestyRate ?? null,
+    settledAmount: result.settledAmount ?? result.totalCollected ?? 0,
+    settledRate: result.settledRate ?? result.honestyRate ?? null,
+    outstandingAmount: result.outstandingAmount ?? 0,
+    unaccountedAmount: result.unaccountedAmount ?? 0,
+  };
+}
+
+function toNumber(value: unknown) {
+  return typeof value === "number"
+    ? value
+    : typeof value === "string"
+      ? Number(value) || 0
+      : 0;
+}
+
+function normalizeCycleStatus(value: unknown): CycleStatus {
+  return value === "ACTIVE" ||
+    value === "CHECKING" ||
+    value === "COMPLETED" ||
+    value === "VOIDED"
+    ? value
+    : "ACTIVE";
+}
