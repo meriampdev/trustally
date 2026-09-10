@@ -26,7 +26,7 @@ import {
 export async function fetchHomeDashboard(selectedLocationId?: string | null) {
   const dashboard = await rpc<Partial<HomeDashboard> | Record<string, unknown> | null>(
     "get_home_dashboard",
-    selectedLocationId ? { p_location_id: selectedLocationId } : undefined,
+    selectedLocationId ? { location_id: selectedLocationId } : undefined,
   );
 
   return normalizeHomeDashboard(dashboard);
