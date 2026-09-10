@@ -13,6 +13,7 @@ import {
 } from "@chakra-ui/react";
 import { FormEvent, FormEventHandler, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
+import { BrandMark } from "../components/BrandMark";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../utils/supabase";
 
@@ -128,9 +129,17 @@ export default function LoginPage() {
           borderColor="whiteAlpha.160"
           boxShadow="0 24px 58px rgba(1, 10, 20, 0.4)"
         >
-          <Text fontSize="xs" textTransform="uppercase" letterSpacing="0.18em" opacity={0.85}>
-            Trustally
-          </Text>
+          <HStack spacing={3}>
+            <BrandMark size={64} />
+            <Box>
+              <Text fontSize="2xl" fontWeight="900" lineHeight="1">
+                Trustally
+              </Text>
+              <Text fontSize="sm" mt={1} opacity={0.85}>
+                Trust, tallied.
+              </Text>
+            </Box>
+          </HStack>
           <Text fontSize="3xl" fontWeight="900" mt={2}>
             {title}
           </Text>

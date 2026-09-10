@@ -22,6 +22,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { useCurrentLocation } from "../lib/location";
 import { supabase } from "../utils/supabase";
+import { BrandMark } from "./BrandMark";
 
 const navItems = [
   { label: "Home", to: "/", icon: House },
@@ -147,14 +148,17 @@ export function AppShell({ children }: AppShellProps) {
           borderColor="whiteAlpha.120"
           boxShadow="0 24px 60px rgba(1, 10, 20, 0.55)"
         >
-          <Box>
-            <Text fontSize="xs" textTransform="uppercase" letterSpacing="0.18em" opacity={0.8}>
-              Trustally
-            </Text>
-            <Text fontSize="3xl" fontWeight="900" mt={2}>
-              Trust, tallied.
-            </Text>
-          </Box>
+          <HStack spacing={3} align="center">
+            <BrandMark size={58} />
+            <Box>
+              <Text fontSize="xl" fontWeight="900" lineHeight="1">
+                Trustally
+              </Text>
+              <Text fontSize="sm" mt={1} opacity={0.82}>
+                Trust, tallied.
+              </Text>
+            </Box>
+          </HStack>
           <VStack align="stretch" spacing={3}>
             {navItems.map((item) => {
               const active =
@@ -227,14 +231,17 @@ export function AppShell({ children }: AppShellProps) {
         <Container maxW="none" px={{ base: 4, md: 6, xl: 8 }} pt={{ base: "calc(var(--safe-area-top) + 16px)", lg: 8 }}>
           <Box maxW="1160px" w="full">
             <HStack justify="space-between" align="end" mb={{ base: 4, md: 6 }}>
-              <Box minW={0}>
-                <Text fontSize="xs" textTransform="uppercase" letterSpacing="0.16em" color="canvas.700">
-                  Trustally
-                </Text>
-                <Text fontSize={{ base: "xl", md: "2xl" }} fontWeight="900" color="canvas.900">
-                  {title}
-                </Text>
-              </Box>
+              <HStack minW={0} spacing={3} align="center">
+                <BrandMark size={44} />
+                <Box minW={0}>
+                  <Text fontSize="xs" textTransform="uppercase" letterSpacing="0.16em" color="canvas.700">
+                    Trustally
+                  </Text>
+                  <Text fontSize={{ base: "xl", md: "2xl" }} fontWeight="900" color="canvas.900" noOfLines={1}>
+                    {title}
+                  </Text>
+                </Box>
+              </HStack>
               {locations.length > 1 ? (
                 <Box minW={{ base: "170px", md: "240px" }}>
                   <Text fontSize="xs" textTransform="uppercase" letterSpacing="0.16em" color="canvas.700" mb={2}>
