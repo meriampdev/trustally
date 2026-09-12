@@ -15,10 +15,13 @@ import { SectionCard } from "../components/SectionCard";
 import { useCurrentLocation } from "../lib/location";
 import {
   fetchCashMovements,
+  fetchCycleDetail,
+  fetchCycleDisclosureAndCollection,
   fetchHistoryFeed,
   fetchHomeDashboard,
   fetchOutstandingBalances,
   fetchProducts,
+  fetchReportsSnapshot,
 } from "../lib/api";
 import {
   formatCount,
@@ -27,7 +30,19 @@ import {
   formatDurationFromNow,
   formatPercent,
 } from "../lib/format";
-import { CashMovement, HistoryItem, HomeDashboard, PayLaterBalance, Product } from "../lib/types";
+import { CashMovement, CycleDetail, CycleHonestyDetail, HistoryItem, HomeDashboard, PayLaterBalance, Product, ReportsSnapshot } from "../lib/types";
+
+type MetricsRange = "latest" | "7d" | "30d" | "month" | "3m" | "6m" | "1y";
+
+const metricsRangeOptions: Array<{ value: MetricsRange; label: string }> = [
+  { value: "latest", label: "Latest cycle" },
+  { value: "7d", label: "7 days" },
+  { value: "30d", label: "30 days" },
+  { value: "month", label: "This month" },
+  { value: "3m", label: "3 months" },
+  { value: "6m", label: "6 months" },
+  { value: "1y", label: "1 year" },
+];
 
 export default function HomePage() {
   const { currentLocationId } = useCurrentLocation();
@@ -37,12 +52,44 @@ export default function HomePage() {
   const [latestBoxCheckEntry, setLatestBoxCheckEntry] = useState<HistoryItem | null>(null);
   const [outstandingBalances, setOutstandingBalances] = useState<PayLaterBalance[]>([]);
   const [cashMovements, setCashMovements] = useState<CashMovement[]>([]);
+  const [recentHonesty, setRecentHonesty] = useState<CycleHonestyDetail | null>(null);
+  const [recentCycleDetail, setRecentCycleDetail] = useState<CycleDetail | null>(null);
+  const [metricsRange, setMetricsRange] = useState<MetricsRange>("latest");
+  const [rangeMetrics, setRangeMetrics] = useState<ReportsSnapshot | null>(null);
+  const [isMetricsLoading, setIsMetricsLoading] = useState(false);
+  const [metricsError, setMetricsError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     void load(currentLocationId);
   }, [currentLocationId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (metricsRange === "latest") {
+      setRangeMetrics(null);
+      setMetricsError("");
+      setIsMetricsLoading(false);
+      return;
+    }
+
+    setIsMetricsLoading(true);
+    setRangeMetrics(null);
+    setMetricsError("");
+    void fetchReportsSnapshot(metricsRange)
+      .then((result) => {
+        if (!cancelled) setRangeMetrics(result);
+      })
+      .catch((error) => {
+        if (!cancelled) setMetricsError(error instanceof Error ? error.message : "Could not load this period.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsMetricsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [metricsRange, currentLocationId]);
 
   async function load(selectedLocationId?: string | null) {
     setIsLoading(true);
@@ -71,6 +118,15 @@ export default function HomePage() {
       setLatestBoxCheckEntry(boxCheckHistory[0] ?? null);
       setOutstandingBalances(nextOutstandingBalances);
       setCashMovements(nextCashMovements);
+      const recentCycleId = nextDashboard.recentResult?.cycleId;
+      const [nextHonesty, nextCycleDetail] = recentCycleId
+        ? await Promise.all([
+            fetchCycleDisclosureAndCollection(recentCycleId),
+            fetchCycleDetail(recentCycleId),
+          ])
+        : [null, null];
+      setRecentHonesty(nextHonesty);
+      setRecentCycleDetail(nextCycleDetail);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Could not load your box.");
     } finally {
@@ -152,38 +208,68 @@ export default function HomePage() {
     (cashRemovedSinceLastVisit > 0 || cashReturnedSinceLastVisit > 0
       ? Math.max(cashReturnedSinceLastVisit - cashRemovedSinceLastVisit, 0)
       : null);
+  const isLatestMetrics = metricsRange === "latest";
+  const metricsAvailable = isLatestMetrics ? Boolean(dashboard.recentResult) : Boolean(rangeMetrics);
+  const metricsTitle = isLatestMetrics
+    ? dashboard.recentResult?.label ?? "No completed checks yet"
+    : metricsRangeOptions.find((option) => option.value === metricsRange)?.label ?? "Selected period";
+  const metricsHonestyRate = isLatestMetrics ? recentHonesty?.summary.disclosureRate ?? null : rangeMetrics?.summary.disclosureRate ?? null;
+  const metricsCollectionRate = isLatestMetrics
+    ? recentHonesty?.summary.collectionRate ?? dashboard.recentResult?.settledRate ?? null
+    : rangeMetrics?.summary.collectionRate ?? null;
+  const metricsUnaccounted = isLatestMetrics ? dashboard.recentResult?.unaccountedAmount ?? 0 : rangeMetrics?.summary.unaccountedAmount ?? 0;
+  const metricsPaymentGap = isLatestMetrics
+    ? recentHonesty?.summary.outstandingRequiredAmount ?? 0
+    : rangeMetrics?.summary.outstandingRequiredAmount ?? 0;
+  const metricsPayLaterOutstanding = isLatestMetrics
+    ? outstandingBalances
+        .filter((balance) => balance.sourceCycleId === dashboard.recentResult?.cycleId)
+        .reduce((total, balance) => total + balance.remainingAmount, 0)
+    : (rangeMetrics?.reportPayLaterBalances ?? []).reduce((total, balance) => total + balance.remainingAmount, 0);
+  const metricsExpectedCollection = isLatestMetrics
+    ? recentHonesty?.summary.currentlyDueAmount ?? dashboard.recentResult?.expectedRevenue ?? 0
+    : rangeMetrics?.summary.paymentRequiredAmount ?? 0;
+  const metricsActualCollection = isLatestMetrics
+    ? recentHonesty?.summary.totalPayments ?? dashboard.recentResult?.immediatePayments ?? 0
+    : rangeMetrics?.summary.totalPayments ?? 0;
+  const metricsSelfReported = isLatestMetrics ? recentHonesty?.summary.selfReportedBottles ?? 0 : rangeMetrics?.summary.selfReportedBottles ?? 0;
+  const metricsUnattributed = isLatestMetrics ? recentHonesty?.summary.unattributedMissingBottles ?? 0 : rangeMetrics?.summary.unattributedMissingBottles ?? 0;
+  const metricsUnclassified = isLatestMetrics ? recentHonesty?.summary.unclassifiedHistoricalRecords ?? 0 : rangeMetrics?.summary.unclassifiedHistoricalRecords ?? 0;
+  const metricsGrossSales = isLatestMetrics
+    ? recentCycleDetail?.totals.expectedRevenue ?? dashboard.recentResult?.expectedRevenue ?? 0
+    : rangeMetrics?.summary.expectedRevenue ?? 0;
+  const metricsCapitalUsed = isLatestMetrics
+    ? recentCycleDetail?.totals.cogs ?? 0
+    : rangeMetrics?.summary.cogs ?? 0;
+  const metricsGrossProfit = isLatestMetrics
+    ? recentCycleDetail?.totals.grossProfit ?? 0
+    : rangeMetrics?.summary.grossProfit ?? 0;
+  const metricsGrossMargin = isLatestMetrics
+    ? recentCycleDetail?.totals.grossMargin ?? null
+    : rangeMetrics?.summary.grossMargin ?? null;
 
   return (
     <Stack spacing={5}>
       <SectionCard eyebrow="Current cycle" title={dashboard.locationName ?? "Your box"}>
-        <SimpleGrid columns={{ base: 1, md: 2, xl: 4 }} spacing={4}>
-          <MetricCard
-            label="Last checked"
-            value={formatDateTimeLabel(lastCheckedAt)}
-            hint={lastCheckedAt ? "Most recent box check" : "No completed box check yet"}
-          />
-          <MetricCard label="Running for" value={formatDurationFromNow(cycleStartedAt)} />
-          <MetricCard
-            label="Last loaded into box"
-            value={formatCount(lastLoadedQuantity)}
-            hint={
-              latestStockEntry
-                ? `Added ${formatDateTimeLabel(latestStockEntry.happenedAt)}`
-                : cycleStartedAt
-                  ? `Tracking from ${formatDateTimeLabel(cycleStartedAt)}`
-                  : "No stock-add record yet"
-            }
-          />
-          <MetricCard
-            label="Outstanding"
-            value={formatCurrency(outstandingAmount)}
-            hint={
-              outstandingBalances.length
-                ? `${outstandingBalances.length} pay-later balance${outstandingBalances.length === 1 ? "" : "s"}`
-                : "No open pay-later balances"
-            }
-          />
-        </SimpleGrid>
+        <Box
+          bg="linear-gradient(180deg, rgba(25, 53, 82, 0.9) 0%, rgba(14, 31, 49, 0.86) 100%)"
+          borderRadius="24px"
+          border="1px solid"
+          borderColor="rgba(142, 182, 215, 0.16)"
+          boxShadow="0 16px 32px rgba(1, 10, 20, 0.28)"
+          px={{ base: 2, md: 3 }}
+          py={2}
+        >
+          <SimpleGrid columns={{ base: 2, md: 4 }}>
+            <CompactCycleStat label="Last checked" value={formatDateTimeLabel(lastCheckedAt)} />
+            <CompactCycleStat label="Running for" value={formatDurationFromNow(cycleStartedAt)} />
+            <CompactCycleStat label="Last loaded" value={formatCount(lastLoadedQuantity)} />
+            <CompactCycleStat
+              label={outstandingBalances.length ? "Pay-later outstanding" : "Known pay-later"}
+              value={outstandingBalances.length ? formatCurrency(outstandingAmount) : "None"}
+            />
+          </SimpleGrid>
+        </Box>
         <HStack mt={5} spacing={3} flexWrap="wrap">
           <Button as={Link} to="/check-box">
             Check box
@@ -203,8 +289,8 @@ export default function HomePage() {
         </HStack>
       </SectionCard>
 
-      <SectionCard eyebrow="Cash status" title="Physical cash in the honesty box">
-        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
+      <SectionCard eyebrow="Cash status" title="Cash position and explained amounts">
+        <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4}>
           <MetricCard
             label="Estimated in box"
             value={formatCurrency(estimatedPhysicalCash)}
@@ -215,14 +301,101 @@ export default function HomePage() {
             }
           />
           <MetricCard
-            label="Removed since last visit"
-            value={formatCurrency(cashRemovedSinceLastVisit)}
+            label="Unaccounted"
+            value={formatCurrency(dashboard.recentResult?.unaccountedAmount ?? 0)}
+            hint="Not yet explained by payment, pay-later, or an authorized adjustment"
           />
           <MetricCard
-            label="Returned since last visit"
-            value={formatCurrency(cashReturnedSinceLastVisit)}
+            label="Known pay-later"
+            value={formatCurrency(dashboard.recentResult?.knownPayLater ?? 0)}
+            hint="Recorded as expected later"
+          />
+          <MetricCard
+            label="Complimentary value"
+            value={formatCurrency(recentHonesty?.summary.complimentaryValue ?? 0)}
+            hint={recentHonesty ? `${recentHonesty.summary.complimentaryBottles} complimentary bottle${recentHonesty.summary.complimentaryBottles === 1 ? "" : "s"}` : "No classified complimentary bottles"}
           />
         </SimpleGrid>
+        <Text color="canvas.700" mt={3} fontSize="sm">
+          Cash movements since last visit: {formatCurrency(cashRemovedSinceLastVisit)} removed · {formatCurrency(cashReturnedSinceLastVisit)} returned
+        </Text>
+      </SectionCard>
+
+      <SectionCard eyebrow="Metrics" title={metricsTitle}>
+        <HStack spacing={2} flexWrap="wrap" mb={4}>
+          {metricsRangeOptions.map((option) => (
+            <Button
+              key={option.value}
+              size="sm"
+              variant={metricsRange === option.value ? "solid" : "outline"}
+              onClick={() => setMetricsRange(option.value)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </HStack>
+        {isMetricsLoading ? <Spinner color="brand.400" /> : metricsError ? (
+          <Text color="caution.600">{metricsError}</Text>
+        ) : metricsAvailable ? (
+          <Stack spacing={3}>
+          <SimpleGrid columns={{ base: 2, md: 3, xl: 5 }} spacing={4}>
+            <MetricCard
+              label="Honesty rate"
+              value={formatPercent(metricsHonestyRate)}
+              hint={`Disclosure honesty · ${metricsSelfReported} self-reported · ${metricsUnattributed} unattributed`}
+            />
+            <MetricCard
+              label="Collection rate"
+              value={metricsCollectionRate == null ? "Payment not required" : formatPercent(metricsCollectionRate)}
+              hint={metricsPaymentGap > 0 ? `${formatCurrency(metricsPaymentGap)} required payment gap` : "No required payment gap"}
+            />
+            <MetricCard label="Unaccounted" value={formatCurrency(metricsUnaccounted)} hint="Amount not yet explained" />
+            {metricsPayLaterOutstanding > 0 ? (
+              <MetricCard
+                label="Outstanding"
+                value={formatCurrency(metricsPayLaterOutstanding)}
+                hint="Remaining known pay-later balance"
+              />
+            ) : null}
+            <MetricCard
+              label="Expected vs actual collection"
+              value={`${formatCurrency(metricsExpectedCollection)} / ${formatCurrency(metricsActualCollection)}`}
+              hint="Expected due / actually collected"
+            />
+          </SimpleGrid>
+          <Box pt={2}>
+            <Text fontWeight="900" mb={3}>Sales</Text>
+            <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4}>
+              <MetricCard
+                label="Gross sales"
+                value={formatCurrency(metricsGrossSales)}
+                hint="Selling value of bottles taken"
+              />
+              <MetricCard
+                label="Capital used"
+                value={formatCurrency(metricsCapitalUsed)}
+                hint="Cost of goods sold"
+              />
+              <MetricCard
+                label="Gross profit"
+                value={formatCurrency(metricsGrossProfit)}
+                hint="Gross sales less product cost"
+              />
+              <MetricCard
+                label="Gross margin"
+                value={formatPercent(metricsGrossMargin)}
+                hint="Gross profit as a share of sales"
+              />
+            </SimpleGrid>
+            <Text color="canvas.700" fontSize="sm" mt={3}>
+              Net profit is not shown because operating expenses are not tracked yet.
+            </Text>
+          </Box>
+          {metricsUnclassified > 0 ? <Text color="canvas.700" mt={3}>{metricsUnclassified} historical record{metricsUnclassified === 1 ? " is" : "s are"} still unclassified.</Text> : null}
+          </Stack>
+        ) : (
+          <Text color="canvas.700">No completed cycles in this period.</Text>
+        )}
       </SectionCard>
 
       <SectionCard eyebrow="Box contents" title="What products are in the box?">
@@ -273,41 +446,6 @@ export default function HomePage() {
         ) : (
           <Text color="canvas.700">
             No separate stock-add event yet. Trustally is using your cycle start as the last box load.
-          </Text>
-        )}
-      </SectionCard>
-
-      <SectionCard eyebrow="Recent result" title={dashboard.recentResult?.label ?? "No completed checks yet"}>
-        {dashboard.recentResult ? (
-          <SimpleGrid columns={{ base: 2, md: 3, xl: 6 }} spacing={4}>
-            <MetricCard
-              label="Expected from bottles taken"
-              value={formatCurrency(dashboard.recentResult.expectedRevenue)}
-            />
-            <MetricCard
-              label="Money received this period"
-              value={formatCurrency(dashboard.recentResult.immediatePayments)}
-            />
-            <MetricCard
-              label="Known pay-later"
-              value={formatCurrency(dashboard.recentResult.knownPayLater)}
-            />
-            <MetricCard
-              label="Unaccounted"
-              value={formatCurrency(dashboard.recentResult.unaccountedAmount)}
-            />
-            <MetricCard
-              label="Accounted rate"
-              value={formatPercent(dashboard.recentResult.accountedRate)}
-            />
-            <MetricCard
-              label="Settled rate"
-              value={formatPercent(dashboard.recentResult.settledRate)}
-            />
-          </SimpleGrid>
-        ) : (
-          <Text color="canvas.700">
-            No box checks yet. Complete your first check to see sales, pay-later, and settlement metrics.
           </Text>
         )}
       </SectionCard>
@@ -407,5 +545,18 @@ export default function HomePage() {
         </SimpleGrid>
       </SectionCard>
     </Stack>
+  );
+}
+
+function CompactCycleStat({ label, value }: { label: string; value: string }) {
+  return (
+    <Box px={{ base: 2, md: 3 }} py={2} minW={0}>
+      <Text fontSize="xs" textTransform="uppercase" letterSpacing="0.1em" color="canvas.700" noOfLines={1}>
+        {label}
+      </Text>
+      <Text mt={1} fontSize={{ base: "md", md: "lg" }} fontWeight="900" color="canvas.900" noOfLines={1}>
+        {value}
+      </Text>
+    </Box>
   );
 }

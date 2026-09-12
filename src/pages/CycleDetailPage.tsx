@@ -8,6 +8,7 @@ import {
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { MetricCard } from "../components/MetricCard";
+import { CycleHonestyPanel } from "../components/CycleHonestyPanel";
 import { SectionCard } from "../components/SectionCard";
 import { fetchCycleDetail } from "../lib/api";
 import {
@@ -97,6 +98,8 @@ export default function CycleDetailPage() {
           ))}
         </Stack>
       </SectionCard>
+
+      <CycleHonestyPanel cycle={detail} />
     </Stack>
   );
 }

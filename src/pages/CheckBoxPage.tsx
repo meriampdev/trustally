@@ -681,13 +681,18 @@ export default function CheckBoxPage() {
                     mt={3}
                     value={draft.differenceResolution.type}
                     onChange={(event) =>
-                      updateDraft(setDraft, setPreview, {
-                        differenceResolution: updateDifferenceResolution(
-                          draft.differenceResolution,
-                          event.target.value as DifferenceResolutionType,
-                          shortfallAmount,
-                        ),
-                      })
+                      updateDraft(
+                        setDraft,
+                        setPreview,
+                        {
+                          differenceResolution: updateDifferenceResolution(
+                            draft.differenceResolution,
+                            event.target.value as DifferenceResolutionType,
+                            shortfallAmount,
+                          ),
+                        },
+                        false,
+                      )
                     }
                   >
                     <option value="">Select one</option>
@@ -716,12 +721,17 @@ export default function CheckBoxPage() {
                       <Input
                         value={draft.differenceResolution.amount}
                         onChange={(event) =>
-                          updateDraft(setDraft, setPreview, {
-                            differenceResolution: {
-                              ...draft.differenceResolution,
-                              amount: event.target.value,
+                          updateDraft(
+                            setDraft,
+                            setPreview,
+                            {
+                              differenceResolution: {
+                                ...draft.differenceResolution,
+                                amount: event.target.value,
+                              },
                             },
-                          })
+                            false,
+                          )
                         }
                         inputMode="decimal"
                         placeholder={shortfallAmount.toFixed(2)}
@@ -731,12 +741,17 @@ export default function CheckBoxPage() {
                       <Input
                         value={draft.differenceResolution.customerLabel}
                         onChange={(event) =>
-                          updateDraft(setDraft, setPreview, {
-                            differenceResolution: {
-                              ...draft.differenceResolution,
-                              customerLabel: event.target.value,
+                          updateDraft(
+                            setDraft,
+                            setPreview,
+                            {
+                              differenceResolution: {
+                                ...draft.differenceResolution,
+                                customerLabel: event.target.value,
+                              },
                             },
-                          })
+                            false,
+                          )
                         }
                         placeholder="Anonymous / Unknown"
                       />
@@ -745,12 +760,17 @@ export default function CheckBoxPage() {
                       <Textarea
                         value={draft.differenceResolution.itemsSummary}
                         onChange={(event) =>
-                          updateDraft(setDraft, setPreview, {
-                            differenceResolution: {
-                              ...draft.differenceResolution,
-                              itemsSummary: event.target.value,
+                          updateDraft(
+                            setDraft,
+                            setPreview,
+                            {
+                              differenceResolution: {
+                                ...draft.differenceResolution,
+                                itemsSummary: event.target.value,
+                              },
                             },
-                          })
+                            false,
+                          )
                         }
                         placeholder="Example: 2 Coke 500mL, 1 water"
                       />
@@ -760,12 +780,17 @@ export default function CheckBoxPage() {
                         type="date"
                         value={draft.differenceResolution.dueDate}
                         onChange={(event) =>
-                          updateDraft(setDraft, setPreview, {
-                            differenceResolution: {
-                              ...draft.differenceResolution,
-                              dueDate: event.target.value,
+                          updateDraft(
+                            setDraft,
+                            setPreview,
+                            {
+                              differenceResolution: {
+                                ...draft.differenceResolution,
+                                dueDate: event.target.value,
+                              },
                             },
-                          })
+                            false,
+                          )
                         }
                       />
                     </Field>
@@ -773,12 +798,17 @@ export default function CheckBoxPage() {
                       <Input
                         value={draft.differenceResolution.note}
                         onChange={(event) =>
-                          updateDraft(setDraft, setPreview, {
-                            differenceResolution: {
-                              ...draft.differenceResolution,
-                              note: event.target.value,
+                          updateDraft(
+                            setDraft,
+                            setPreview,
+                            {
+                              differenceResolution: {
+                                ...draft.differenceResolution,
+                                note: event.target.value,
+                              },
                             },
-                          })
+                            false,
+                          )
                         }
                         placeholder="Payday group, Mark, late wallet check..."
                       />
@@ -789,12 +819,17 @@ export default function CheckBoxPage() {
                     <Textarea
                       value={draft.differenceResolution.note}
                       onChange={(event) =>
-                        updateDraft(setDraft, setPreview, {
-                          differenceResolution: {
-                            ...draft.differenceResolution,
-                            note: event.target.value,
+                        updateDraft(
+                          setDraft,
+                          setPreview,
+                          {
+                            differenceResolution: {
+                              ...draft.differenceResolution,
+                              note: event.target.value,
+                            },
                           },
-                        })
+                          false,
+                        )
                       }
                       placeholder="Add context for this mismatch"
                     />
@@ -1004,8 +1039,11 @@ function updateDraft(
   setDraft: React.Dispatch<React.SetStateAction<CheckBoxDraft | null>>,
   setPreview: React.Dispatch<React.SetStateAction<CheckBoxPreview | null>>,
   patch: Partial<CheckBoxDraft>,
+  invalidatePreview = true,
 ) {
-  setPreview(null);
+  if (invalidatePreview) {
+    setPreview(null);
+  }
   setDraft((current) => (current ? { ...current, ...patch } : current));
 }
 

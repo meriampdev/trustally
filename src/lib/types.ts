@@ -3,6 +3,15 @@ export type HistoryFilter = "all" | "box_checks" | "stock_added" | "adjustments"
 export type LocationRole = "OWNER" | "STAFF";
 export type PaymentMethod = "CASH" | "GCASH" | "MAYA" | "BANK" | "OTHER";
 export type PaymentTiming = "CURRENT" | "DELAYED" | "ADVANCE" | "UNASSIGNED";
+export type DisclosureSource = "unknown" | "self_reported" | "owner_recorded" | "inventory_discrepancy";
+export type PaymentExpectation = "unknown" | "required" | "pay_later" | "complimentary";
+export type DerivedBottlePaymentStatus =
+  | "paid"
+  | "partially_paid"
+  | "unpaid"
+  | "pay_later"
+  | "complimentary"
+  | "unresolved";
 export type PayLaterStatus = "OPEN" | "PARTIALLY_PAID" | "PAID" | "WRITTEN_OFF";
 export type CashMovementType = "CASH_REMOVED" | "CASH_RETURNED" | "CASH_CORRECTION";
 export type DifferenceResolutionType =
@@ -47,7 +56,9 @@ export interface HomeRecentResult {
   totalCollected: number;
   immediatePayments: number;
   differenceAmount: number;
+  /** @deprecated Payment-derived compatibility alias. Use collectionRate. */
   honestyRate: number | null;
+  collectionRate?: number | null;
   collectionMatchRate: number | null;
   knownPayLater: number;
   accountedAmount: number;
@@ -188,7 +199,9 @@ export interface CheckBoxPreview {
     expectedRevenue: number;
     totalCollected: number;
     differenceAmount: number;
+    /** @deprecated Payment-derived compatibility alias. Use collectionRate. */
     honestyRate: number | null;
+    collectionRate?: number | null;
     cashCollected: number;
     gcashCollected: number;
     mayaCollected: number;
@@ -240,7 +253,9 @@ export interface HistoryItem {
   expectedRevenue?: number | null;
   totalCollected?: number | null;
   differenceAmount?: number | null;
+  /** @deprecated Payment-derived compatibility alias. Use collectionRate. */
   honestyRate?: number | null;
+  collectionRate?: number | null;
   quantity?: number | null;
 }
 
@@ -262,7 +277,9 @@ export interface CycleDetail {
     totalCollected: number;
     immediatePayments: number;
     differenceAmount: number;
+    /** @deprecated Payment-derived compatibility alias. Use collectionRate. */
     honestyRate: number | null;
+    collectionRate?: number | null;
     collectionMatchRate: number | null;
     knownPayLater: number;
     accountedAmount: number;
@@ -302,6 +319,136 @@ export interface CycleDetail {
   }>;
 }
 
+export interface DetectedCycle {
+  cycleId: string;
+  cycleNumber: number;
+  status: CycleStatus;
+  startedAt: string;
+  completedAt: string | null;
+  timezone: string;
+}
+
+export interface RetroactiveUnpaidEntry {
+  id: string;
+  cycleId: string;
+  cycleNumber: number;
+  cycleStartedAt: string;
+  cycleCompletedAt: string | null;
+  takenAt: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  confirmedAmount: number;
+  customerLabel: string | null;
+  /** Person is a clearer alias; customerLabel remains for older callers. */
+  personLabel?: string | null;
+  disclosureSource?: DisclosureSource;
+  paymentExpectation?: PaymentExpectation;
+  classificationRecordedAt?: string | null;
+  isUnclassifiedHistorical?: boolean;
+  paymentStatus?: DerivedBottlePaymentStatus;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RetroactiveOnlinePayment {
+  id: string;
+  cycleId: string;
+  cycleNumber: number;
+  cycleStartedAt: string;
+  cycleCompletedAt: string | null;
+  paidAt: string;
+  amount: number;
+  method: Exclude<PaymentMethod, "CASH">;
+  customerLabel: string | null;
+  personLabel?: string | null;
+  referenceNumber: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersonHonestyHistoryItem {
+  id: string;
+  type: "bottle" | "payment";
+  happenedAt: string;
+  quantity?: number;
+  amount: number;
+  method?: Exclude<PaymentMethod, "CASH">;
+  disclosureSource?: DisclosureSource;
+  paymentExpectation?: PaymentExpectation;
+}
+
+export interface PersonHonestySummary {
+  personLabel: string;
+  totalKnownBottles: number;
+  selfReportedBottles: number;
+  ownerRecordedBottles: number;
+  inventoryDiscrepancyBottles: number;
+  complimentaryBottles: number;
+  paymentRequiredBottles: number;
+  payLaterBottles: number;
+  amountRequired: number;
+  payLaterAmount: number;
+  amountPaid: number;
+  outstandingAmount: number;
+  disclosureRate: number | null;
+  collectionRate: number | null;
+  unclassifiedHistoricalRecords: number;
+  recentHistory: PersonHonestyHistoryItem[];
+}
+
+export interface CycleHonestyDetail {
+  cycleId: string;
+  cycleNumber: number;
+  status: CycleStatus;
+  startedAt: string;
+  completedAt: string | null;
+  timezone: string;
+  summary: {
+    totalBottlesTaken: number;
+    selfReportedBottles: number;
+    ownerRecordedBottles: number;
+    inventoryDiscrepancyBottles: number;
+    unattributedMissingBottles: number;
+    complimentaryBottles: number;
+    complimentaryHonestlyDisclosed: number;
+    knownAttributedBottles: number;
+    disclosureRate: number | null;
+    disclosureCoverage: number | null;
+    unclassifiedHistoricalRecords: number;
+    unclassifiedHistoricalBottles: number;
+    paymentRequiredAmount: number;
+    payLaterAmount: number;
+    complimentaryValue: number;
+    unknownPaymentValue: number;
+    totalExpectedPayment: number;
+    currentlyDueAmount: number;
+    expectedRevenue: number;
+    physicalCashCollected: number;
+    onlinePayments: number;
+    totalPayments: number;
+    knownUnpaidBottles: number;
+    confirmedUnpaidAmount: number;
+    outstandingAmount: number;
+    outstandingRequiredAmount: number;
+    overpaymentAmount: number;
+    collectionRate: number | null;
+    /** @deprecated Payment-derived compatibility alias. Use collectionRate. */
+    honestyRate: number | null;
+    coachDeductions: number;
+    otherAuthorizedDeductions: number;
+    unexplainedOutstandingAmount: number;
+    allocationRule: string;
+  };
+  bottleTakenRecords?: RetroactiveUnpaidEntry[];
+  unpaidEntries: RetroactiveUnpaidEntry[];
+  onlinePayments: RetroactiveOnlinePayment[];
+  personSummaries: PersonHonestySummary[];
+}
+
 export interface ReportsSnapshot {
   rangeKey: string;
   summary: {
@@ -329,6 +476,22 @@ export interface ReportsSnapshot {
     averageBottlesPerDay: number | null;
     averageRevenuePerDay: number | null;
     averageRevenuePerCycle: number | null;
+    totalKnownBottles: number;
+    selfReportedBottles: number;
+    ownerRecordedBottles: number;
+    inventoryDiscrepancyBottles: number;
+    unattributedMissingBottles: number;
+    complimentaryBottles: number;
+    unclassifiedHistoricalRecords: number;
+    knownUnpaidBottles: number;
+    knownUnpaidAmount: number;
+    disclosureRate: number | null;
+    collectionRate: number | null;
+    paymentRequiredAmount: number;
+    payLaterAmount: number;
+    complimentaryValue: number;
+    totalPayments: number;
+    outstandingRequiredAmount: number;
   };
   expectedVsCollected: Array<{
     label: string;
@@ -362,6 +525,89 @@ export interface ReportsSnapshot {
     lastKnownQuantity: number | null;
     estimatedRemaining: number | null;
   }>;
+  disclosureCollectionTrend: Array<{
+    cycleId: string;
+    label: string;
+    completedAt: string;
+    disclosureRate: number | null;
+    collectionRate: number | null;
+    selfReportedBottles: number;
+    knownAttributedBottles: number;
+    knownUnpaidBottles: number;
+    outstandingRequiredAmount: number;
+  }>;
+  knownUnpaidRecords: Array<RetroactiveUnpaidEntry & { cycleLabel: string }>;
+  reportCycles: ReportCycleDetail[];
+  reportBottleRecords: Array<RetroactiveUnpaidEntry & { cycleLabel: string }>;
+  reportOnlinePayments: Array<RetroactiveOnlinePayment & { cycleLabel: string }>;
+  reportPayLaterBalances: PayLaterBalance[];
+  reportPaymentReceipts: PaymentReceipt[];
+}
+
+export interface ReportCycleDetail {
+  cycleId: string;
+  label: string;
+  startedAt: string;
+  completedAt: string;
+  expectedRevenue: number;
+  immediateCollected: number;
+  knownPayLater: number;
+  accountedAmount: number;
+  accountedRate: number | null;
+  settledAmount: number;
+  settledRate: number | null;
+  unaccountedAmount: number;
+  differenceAmount: number;
+  bottlesTaken: number;
+  selfReportedBottles: number;
+  ownerRecordedBottles: number;
+  inventoryDiscrepancyBottles: number;
+  unattributedMissingBottles: number;
+  complimentaryBottles: number;
+  unclassifiedHistoricalRecords: number;
+  disclosureRate: number | null;
+  collectionRate: number | null;
+  paymentRequiredAmount: number;
+  payLaterAmount: number;
+  complimentaryValue: number;
+  physicalCashCollected: number;
+  onlinePayments: number;
+  totalPayments: number;
+  outstandingRequiredAmount: number;
+  overpaymentAmount: number;
+}
+
+export interface ReportDrilldown {
+  cycles: ReportCycleDetail[];
+  bottleRecords: ReportsSnapshot["reportBottleRecords"];
+  onlinePayments: ReportsSnapshot["reportOnlinePayments"];
+  payLaterBalances: PayLaterBalance[];
+  paymentReceipts: PaymentReceipt[];
+}
+
+export interface DisclosureCollectionReport {
+  rangeKey: string;
+  summary: Pick<
+    ReportsSnapshot["summary"],
+    | "totalKnownBottles"
+    | "selfReportedBottles"
+    | "ownerRecordedBottles"
+    | "inventoryDiscrepancyBottles"
+    | "unattributedMissingBottles"
+    | "complimentaryBottles"
+    | "unclassifiedHistoricalRecords"
+    | "knownUnpaidBottles"
+    | "knownUnpaidAmount"
+    | "disclosureRate"
+    | "collectionRate"
+    | "paymentRequiredAmount"
+    | "payLaterAmount"
+    | "complimentaryValue"
+    | "totalPayments"
+    | "outstandingRequiredAmount"
+  >;
+  cycleTrend: ReportsSnapshot["disclosureCollectionTrend"];
+  knownUnpaidRecords: ReportsSnapshot["knownUnpaidRecords"];
 }
 
 export interface Settings {

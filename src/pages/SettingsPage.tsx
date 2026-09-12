@@ -83,7 +83,7 @@ export default function SettingsPage() {
               inputMode="numeric"
             />
           </Field>
-          <Field label="Excellent honesty from">
+          <Field label="Excellent collection match from">
             <Input
               value={String(settings.honestyExcellentMin)}
               onChange={(event) =>
@@ -94,7 +94,7 @@ export default function SettingsPage() {
               inputMode="decimal"
             />
           </Field>
-          <Field label="Good honesty from">
+          <Field label="Good collection match from">
             <Input
               value={String(settings.honestyGoodMin)}
               onChange={(event) =>

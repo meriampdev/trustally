@@ -16,6 +16,15 @@ const shortDateTime = new Intl.DateTimeFormat("en-PH", {
   minute: "2-digit",
 });
 
+const manilaDateTime = new Intl.DateTimeFormat("en-PH", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "Asia/Manila",
+});
+
 export function formatCurrency(value: number | null | undefined) {
   return peso.format(value ?? 0);
 }
@@ -39,6 +48,39 @@ export function formatDateTimeLabel(value: string | null | undefined) {
   }
 
   return shortDateTime.format(new Date(value));
+}
+
+export function formatManilaDateTime(value: string | null | undefined) {
+  if (!value) {
+    return "Not yet";
+  }
+
+  return manilaDateTime.format(new Date(value));
+}
+
+export function toManilaDateTimeInput(value: string | Date = new Date()) {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "Asia/Manila",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
+}
+
+export function manilaDateTimeInputToIso(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) {
+    throw new Error("Enter a valid date and time.");
+  }
+
+  return new Date(`${value}:00+08:00`).toISOString();
 }
 
 export function formatDateRange(startedAt: string, completedAt?: string | null) {

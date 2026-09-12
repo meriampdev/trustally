@@ -8,15 +8,20 @@ import {
   CheckBoxPreview,
   CheckBoxRefillInput,
   CycleDetail,
+  CycleHonestyDetail,
   CycleStatus,
+  DetectedCycle,
+  DisclosureCollectionReport,
   HistoryFilter,
   HistoryItem,
   HomeDashboard,
   NonSaleRemovalInput,
   PayLaterBalance,
+  PersonHonestySummary,
   PaymentReceipt,
   Product,
   ProductUpsertInput,
+  ReportDrilldown,
   ReportsSnapshot,
   Settings,
   SetupProductInput,
@@ -260,17 +265,150 @@ export async function fetchCycleDetail(cycleId: string) {
   });
 }
 
+export async function detectCycleForTransaction(occurredAt: string) {
+  return rpc<DetectedCycle>("detect_cycle_for_transaction", {
+    p_occurred_at: occurredAt,
+  });
+}
+
+export async function fetchCycleDisclosureAndCollection(cycleId: string) {
+  return rpc<CycleHonestyDetail>("get_cycle_honesty", {
+    p_cycle_id: cycleId,
+  });
+}
+
+/** @deprecated Use fetchCycleDisclosureAndCollection. */
+export const fetchCycleHonesty = fetchCycleDisclosureAndCollection;
+
+export async function fetchPersonHonesty(input: {
+  cycleId?: string | null;
+  startAt?: string | null;
+  endAt?: string | null;
+}) {
+  return rpc<PersonHonestySummary[]>("get_person_honesty", {
+    p_cycle_id: input.cycleId ?? null,
+    p_start_at: input.startAt ?? null,
+    p_end_at: input.endAt ?? null,
+  });
+}
+
+export async function saveBottleTakenRecord(input: {
+  id?: string | null;
+  takenAt: string;
+  productId: string;
+  quantity: number;
+  personLabel?: string;
+  disclosureSource: "self_reported" | "owner_recorded" | "inventory_discrepancy";
+  paymentExpectation: "required" | "pay_later" | "complimentary" | "unknown";
+  note?: string;
+  idempotencyKey: string;
+}) {
+  return rpc<{ id: string; cycleId: string; duplicate: boolean }>(
+    "save_bottle_taken_record",
+    {
+      p_id: input.id ?? null,
+      p_taken_at: input.takenAt,
+      p_product_id: input.productId,
+      p_quantity: input.quantity,
+      p_person_label: input.personLabel ?? null,
+      p_disclosure_source: input.disclosureSource,
+      p_payment_expectation: input.paymentExpectation,
+      p_note: input.note ?? null,
+      p_idempotency_key: input.idempotencyKey,
+    },
+  );
+}
+
+/** @deprecated Kept for callers that still send the original unclassified payload. */
+export async function saveRetroactiveUnpaidEntry(input: {
+  id?: string | null;
+  takenAt: string;
+  productId: string;
+  quantity: number;
+  customerLabel?: string;
+  note?: string;
+  idempotencyKey: string;
+}) {
+  return rpc<{ id: string; cycleId: string; duplicate: boolean }>(
+    "save_retroactive_unpaid_entry",
+    {
+      p_id: input.id ?? null,
+      p_taken_at: input.takenAt,
+      p_product_id: input.productId,
+      p_quantity: input.quantity,
+      p_customer_label: input.customerLabel ?? null,
+      p_note: input.note ?? null,
+      p_idempotency_key: input.idempotencyKey,
+    },
+  );
+}
+
+export async function deleteRetroactiveUnpaidEntry(id: string) {
+  return rpc<{ id: string; cycleId: string; deleted: boolean }>(
+    "delete_retroactive_unpaid_entry",
+    { p_id: id },
+  );
+}
+
+export async function saveRetroactiveOnlinePayment(input: {
+  id?: string | null;
+  paidAt: string;
+  amount: string;
+  method: string;
+  customerLabel?: string;
+  referenceNumber?: string;
+  note?: string;
+  idempotencyKey: string;
+}) {
+  return rpc<{ id: string; cycleId: string; duplicate: boolean }>(
+    "save_retroactive_online_payment",
+    {
+      p_id: input.id ?? null,
+      p_paid_at: input.paidAt,
+      p_amount: input.amount,
+      p_method: input.method,
+      p_customer_label: input.customerLabel ?? null,
+      p_reference_number: input.referenceNumber ?? null,
+      p_note: input.note ?? null,
+      p_idempotency_key: input.idempotencyKey,
+    },
+  );
+}
+
+export async function deleteRetroactiveOnlinePayment(id: string) {
+  return rpc<{ id: string; cycleId: string; deleted: boolean }>(
+    "delete_retroactive_online_payment",
+    { p_id: id },
+  );
+}
+
 export async function fetchReportsSnapshot(rangeKey: string) {
-  const [snapshot, balances] = await Promise.all([
+  const [snapshot, balances, disclosureCollection, drilldown] = await Promise.all([
     rpc<Partial<ReportsSnapshot> | null>("get_reports_snapshot", {
       p_range_key: rangeKey,
       p_start_date: null,
       p_end_date: null,
     }),
     fetchOutstandingBalances(),
+    rpc<Partial<DisclosureCollectionReport> | null>("get_disclosure_collection_report", {
+      p_range_key: rangeKey,
+      p_start_date: null,
+      p_end_date: null,
+    }).catch((error) => {
+      if (isMissingRpcError(error, "get_disclosure_collection_report")) return null;
+      throw error;
+    }),
+    rpc<Partial<ReportDrilldown> | null>("get_report_drilldown", {
+      p_range_key: rangeKey,
+      p_start_date: null,
+      p_end_date: null,
+    }).catch((error) => {
+      if (isMissingRpcError(error, "get_report_drilldown")) return null;
+      throw error;
+    }),
   ]);
 
-  return normalizeReportsSnapshot(snapshot, rangeKey, balances);
+  return normalizeReportsSnapshot(snapshot, rangeKey, balances, disclosureCollection, drilldown);
 }
 
 export async function fetchSettings() {
@@ -331,6 +469,8 @@ function normalizeReportsSnapshot(
   snapshot: Partial<ReportsSnapshot> | null,
   rangeKey: string,
   balances: PayLaterBalance[] = [],
+  disclosureCollection: Partial<DisclosureCollectionReport> | null = null,
+  drilldown: Partial<ReportDrilldown> | null = null,
 ): ReportsSnapshot {
   const source = (snapshot ?? {}) as Record<string, unknown>;
   const legacyMetrics =
@@ -377,6 +517,7 @@ function normalizeReportsSnapshot(
   const legacyGrossProfit = toNumber(legacyMetrics?.grossProfit);
   const fallbackOutstandingAmount = balances.reduce((sum, balance) => sum + balance.remainingAmount, 0);
   const hasLegacyMetricsShape = legacyMetrics !== null || Array.isArray(source.items);
+  const disclosureSummary = disclosureCollection?.summary;
 
   return {
     rangeKey: snapshot?.rangeKey ?? rangeKey,
@@ -410,12 +551,35 @@ function normalizeReportsSnapshot(
       averageBottlesPerDay: snapshot?.summary?.averageBottlesPerDay ?? null,
       averageRevenuePerDay: snapshot?.summary?.averageRevenuePerDay ?? null,
       averageRevenuePerCycle: snapshot?.summary?.averageRevenuePerCycle ?? null,
+      totalKnownBottles: disclosureSummary?.totalKnownBottles ?? 0,
+      selfReportedBottles: disclosureSummary?.selfReportedBottles ?? 0,
+      ownerRecordedBottles: disclosureSummary?.ownerRecordedBottles ?? 0,
+      inventoryDiscrepancyBottles: disclosureSummary?.inventoryDiscrepancyBottles ?? 0,
+      unattributedMissingBottles: disclosureSummary?.unattributedMissingBottles ?? 0,
+      complimentaryBottles: disclosureSummary?.complimentaryBottles ?? 0,
+      unclassifiedHistoricalRecords: disclosureSummary?.unclassifiedHistoricalRecords ?? 0,
+      knownUnpaidBottles: disclosureSummary?.knownUnpaidBottles ?? 0,
+      knownUnpaidAmount: disclosureSummary?.knownUnpaidAmount ?? 0,
+      disclosureRate: disclosureSummary?.disclosureRate ?? null,
+      collectionRate: disclosureSummary?.collectionRate ?? null,
+      paymentRequiredAmount: disclosureSummary?.paymentRequiredAmount ?? 0,
+      payLaterAmount: disclosureSummary?.payLaterAmount ?? 0,
+      complimentaryValue: disclosureSummary?.complimentaryValue ?? 0,
+      totalPayments: disclosureSummary?.totalPayments ?? 0,
+      outstandingRequiredAmount: disclosureSummary?.outstandingRequiredAmount ?? 0,
     },
     expectedVsCollected,
     bottlesTaken,
     honestyTrend,
     accountedTrend,
     productPerformance,
+    disclosureCollectionTrend: disclosureCollection?.cycleTrend ?? [],
+    knownUnpaidRecords: disclosureCollection?.knownUnpaidRecords ?? [],
+    reportCycles: drilldown?.cycles ?? [],
+    reportBottleRecords: drilldown?.bottleRecords ?? [],
+    reportOnlinePayments: drilldown?.onlinePayments ?? [],
+    reportPayLaterBalances: drilldown?.payLaterBalances ?? [],
+    reportPaymentReceipts: drilldown?.paymentReceipts ?? [],
   };
 }
 
@@ -482,6 +646,7 @@ function normalizeHomeRecentResult(result?: HomeDashboard["recentResult"] | null
 
   return {
     ...result,
+    collectionRate: result.collectionRate ?? result.collectionMatchRate ?? result.honestyRate ?? null,
     immediatePayments: result.immediatePayments ?? result.totalCollected ?? 0,
     collectionMatchRate: result.collectionMatchRate ?? result.honestyRate ?? null,
     knownPayLater: result.knownPayLater ?? 0,

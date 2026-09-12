@@ -305,9 +305,9 @@ export function AppShell({ children }: AppShellProps) {
                   color="white"
                   borderRadius="24px"
                   px={2}
-                  bg={item.prominent ? "brand.400" : active ? "whiteAlpha.200" : "transparent"}
-                  _hover={{ bg: item.prominent ? "brand.500" : "whiteAlpha.200" }}
-                  _active={{ bg: item.prominent ? "brand.600" : "whiteAlpha.300" }}
+                  bg={active ? "brand.400" : "transparent"}
+                  _hover={{ bg: active ? "brand.500" : "whiteAlpha.200" }}
+                  _active={{ bg: active ? "brand.600" : "whiteAlpha.300" }}
                 >
                   <VStack spacing={1}>
                     <item.icon size={item.prominent ? 22 : 18} />

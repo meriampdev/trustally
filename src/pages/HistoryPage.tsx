@@ -66,7 +66,7 @@ export default function HistoryPage() {
                 {item.bottlesTaken != null ? <Text>{item.bottlesTaken} bottles taken</Text> : null}
                 {item.expectedRevenue != null ? <Text>Expected {formatCurrency(item.expectedRevenue)}</Text> : null}
                 {item.totalCollected != null ? <Text>Collected {formatCurrency(item.totalCollected)}</Text> : null}
-                {item.honestyRate != null ? <Text>Honesty {formatPercent(item.honestyRate)}</Text> : null}
+                {item.collectionRate != null || item.honestyRate != null ? <Text>Collection match {formatPercent(item.collectionRate ?? item.honestyRate)}</Text> : null}
               </HStack>
               {item.cycleId ? (
                 <Button as={Link} to={`/history/${item.cycleId}`} mt={4} variant="outline">
