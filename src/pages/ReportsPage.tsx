@@ -64,6 +64,12 @@ export default function ReportsPage() {
     return <Spinner color="brand.400" />;
   }
 
+  const actualGrossSales = snapshot.summary.totalPayments;
+  const actualGrossProfit = actualGrossSales - snapshot.summary.cogs;
+  const actualGrossMargin = actualGrossSales > 0
+    ? (actualGrossProfit / actualGrossSales) * 100
+    : null;
+
   return (
     <Stack spacing={5}>
       <SectionCard eyebrow="Range" title="Choose a reporting window">
@@ -82,21 +88,45 @@ export default function ReportsPage() {
 
       <SectionCard eyebrow="Operational totals" title="What happened during these cycles">
         <SimpleGrid columns={{ base: 2, xl: 4 }} spacing={4}>
-          <MetricCard label="Immediate collected" value={formatCurrency(snapshot.summary.totalCollected)} hint="View collection details" onClick={() => setDetailView("immediateCollected")} />
+          <MetricCard label="Total collected" value={formatCurrency(snapshot.summary.totalPayments)} hint="Includes retroactive payments · View details" onClick={() => setDetailView("totalPayments")} />
+          <MetricCard label="Cash payments" value={formatCurrency(snapshot.summary.cashPayments)} hint="View cash records by cycle" onClick={() => setDetailView("cashPayments")} />
+          <MetricCard label="Online payments" value={formatCurrency(snapshot.summary.onlinePayments)} hint="View online records by cycle" onClick={() => setDetailView("onlinePayments")} />
           <MetricCard label="Known pay-later" value={formatCurrency(snapshot.summary.knownPayLater)} hint="View balances" onClick={() => setDetailView("knownPayLater")} />
           <MetricCard label="Bottles taken" value={String(snapshot.summary.bottlesTaken)} hint="View cycle and bottle details" onClick={() => setDetailView("bottlesTaken")} />
-          <MetricCard label="Revenue per cycle" value={formatCurrency(snapshot.summary.averageRevenuePerCycle)} hint="View cycle revenue" onClick={() => setDetailView("expectedRevenue")} />
+          <MetricCard label="Avg expected sales / cycle" value={formatCurrency(snapshot.summary.averageRevenuePerCycle)} hint="Based on bottles taken · View cycles" onClick={() => setDetailView("expectedRevenue")} />
         </SimpleGrid>
       </SectionCard>
 
       <SectionCard eyebrow="Sales metrics" title="Financial performance">
         <SimpleGrid columns={{ base: 2, xl: 4 }} spacing={4}>
-          <MetricCard label="Gross sales" value={formatCurrency(snapshot.summary.expectedRevenue)} hint="View product breakdown" onClick={() => setDetailView("salesRevenue")} />
+          <MetricCard label="Gross sales" value={formatCurrency(actualGrossSales)} hint="Actual recorded payments · View details" onClick={() => setDetailView("salesRevenue")} />
           <MetricCard label="Capital used" value={formatCurrency(snapshot.summary.cogs)} hint="Cost of goods sold · View details" onClick={() => setDetailView("capitalUsed")} />
-          <MetricCard label="Gross profit" value={formatCurrency(snapshot.summary.grossProfit)} hint="View product breakdown" onClick={() => setDetailView("grossProfit")} />
-          <MetricCard label="Gross margin" value={formatPercent(snapshot.summary.grossMargin)} hint="View product breakdown" onClick={() => setDetailView("grossMargin")} />
+          <MetricCard label="Gross profit" value={formatCurrency(actualGrossProfit)} hint="Recorded money less product cost · View calculation" onClick={() => setDetailView("grossProfit")} />
+          <MetricCard label="Gross margin" value={formatPercent(actualGrossMargin)} hint="Cash-basis margin · View calculation" onClick={() => setDetailView("grossMargin")} />
         </SimpleGrid>
-        <Text color="canvas.700" fontSize="sm" mt={3}>Net profit is not shown because operating expenses are not tracked yet.</Text>
+        <Text color="canvas.700" fontSize="sm" mt={3}>These are cash-basis sales metrics from recorded payments. Net profit is not shown because operating expenses are not tracked yet.</Text>
+      </SectionCard>
+
+      <SectionCard eyebrow="Cash box flow" title="Change float by cycle">
+        <SimpleGrid columns={{ base: 2, xl: 4 }} spacing={4}>
+          <MetricCard label="Cash counted" value={formatCurrency(snapshot.cashFloatSummary.cashCounted)} />
+          <MetricCard label="Customer cash generated" value={formatCurrency(snapshot.cashFloatSummary.cashGenerated)} />
+          <MetricCard label="Cash withdrawn" value={formatCurrency(snapshot.cashFloatSummary.cashWithdrawn)} />
+          <MetricCard label="Unknown opening floats" value={String(snapshot.cashFloatSummary.unknownOpeningFloatCycles)} hint="Excluded from generated-cash total" />
+        </SimpleGrid>
+        <Stack spacing={3} mt={4}>
+          {snapshot.reportCashFloats.length ? snapshot.reportCashFloats.map((cashFloat) => (
+            <Box as={Link} to={`/history/${cashFloat.cycleId}`} key={cashFloat.cycleId} display="block" borderRadius="24px" bg="canvas.50" p={4} _hover={{ textDecoration: "none", bg: "whiteAlpha.100" }}>
+              <Text fontWeight="900">{cashFloat.cycleLabel}</Text>
+              <Text color="canvas.700" mt={1}>
+                Opening {cashFloat.openingChangeFloat == null ? "Unknown" : formatCurrency(cashFloat.openingChangeFloat)} · Counted {formatCurrency(cashFloat.cashCountedBeforeWithdrawal)} · Left for Change {formatCurrency(cashFloat.closingChangeFloat)}
+              </Text>
+              <Text color="canvas.700" mt={1}>
+                Cash generated {cashFloat.cashGenerated == null ? "Cannot be determined until opening float is provided" : formatCurrency(cashFloat.cashGenerated)} · Withdrawn {formatCurrency(cashFloat.cashWithdrawn)}
+              </Text>
+            </Box>
+          )) : <Text color="canvas.700">No completed cash checks in this range.</Text>}
+        </Stack>
       </SectionCard>
 
       <SectionCard eyebrow="Disclosure and collection" title="How bottles were disclosed and paid for">
@@ -224,6 +254,9 @@ export default function ReportsPage() {
 
 const detailTitles: Record<string, string> = {
   immediateCollected: "Immediate collection details",
+  totalPayments: "Total payment details",
+  cashPayments: "Cash payment details",
+  onlinePayments: "Online payment details",
   knownPayLater: "Known pay-later details",
   bottlesTaken: "Bottle details",
   expectedRevenue: "Expected revenue by cycle",
@@ -264,10 +297,14 @@ function ReportDetailContent({ detailView, snapshot }: { detailView: string; sna
           <DetailValue label="Bottles taken" value={String(cycle.bottlesTaken)} />
           <DetailValue label="Expected" value={formatCurrency(cycle.expectedRevenue)} />
           <DetailValue label="Collected" value={formatCurrency(cycle.immediateCollected)} />
+          <DetailValue label="Cash payments" value={formatCurrency(cycle.physicalCashCollected)} />
+          <DetailValue label="Online payments" value={formatCurrency(cycle.onlinePayments)} />
+          <DetailValue label="Total payments" value={formatCurrency(cycle.totalPayments)} />
           <DetailValue label="Disclosure" value={formatPercent(cycle.disclosureRate)} />
           <DetailValue label="Collection" value={cycle.collectionRate == null ? "Payment not required" : formatPercent(cycle.collectionRate)} />
           <DetailValue label="Required payment gap" value={formatCurrency(cycle.outstandingRequiredAmount)} />
         </SimpleGrid>
+        <PaymentRecordList records={snapshot.reportPaymentRecords.filter((record) => record.cycleId === cycle.cycleId)} />
         <Text color="canvas.700">{formatManilaDateTime(cycle.startedAt)} to {formatManilaDateTime(cycle.completedAt)}</Text>
         <Button as={Link} to={`/history/${cycle.cycleId}`}>View full cycle</Button>
       </Stack>
@@ -305,14 +342,21 @@ function ReportDetailContent({ detailView, snapshot }: { detailView: string; sna
   };
   const filter = bottleFilters[detailView];
   const records = filter ? snapshot.reportBottleRecords.filter(filter) : [];
-  const cycleKeys = new Set(["immediateCollected", "bottlesTaken", "expectedRevenue", "disclosure", "unattributed", "collection", "paymentRequired", "payLater", "outstanding"]);
+  const cycleKeys = new Set(["immediateCollected", "totalPayments", "cashPayments", "onlinePayments", "bottlesTaken", "expectedRevenue", "disclosure", "unattributed", "collection", "paymentRequired", "payLater", "outstanding"]);
   const financialKeys = new Set(["salesRevenue", "capitalUsed", "grossProfit", "grossMargin"]);
 
   return (
     <Stack spacing={4}>
       {cycleKeys.has(detailView) ? <CycleBreakdown cycles={snapshot.reportCycles} detailView={detailView} /> : null}
       {filter ? <RecordList records={records} empty="No matching individual bottle records in the selected range." /> : null}
-      {financialKeys.has(detailView) ? <ProductFinancialBreakdown products={snapshot.productPerformance} /> : null}
+      {detailView === "salesRevenue" ? <PaymentRecordList records={snapshot.reportPaymentRecords} /> : null}
+      {detailView === "capitalUsed" ? <CapitalBreakdown products={snapshot.productPerformance} /> : null}
+      {detailView === "grossProfit" || detailView === "grossMargin" ? <FinancialCalculation snapshot={snapshot} /> : null}
+      {detailView === "totalPayments" || detailView === "cashPayments" || detailView === "onlinePayments" ? (
+        <PaymentRecordList
+          records={snapshot.reportPaymentRecords.filter((record) => detailView === "totalPayments" || record.channel === (detailView === "cashPayments" ? "cash" : "online"))}
+        />
+      ) : null}
       {detailView === "knownPayLater" || detailView === "payLater" ? (
         <Stack spacing={3}>
           {snapshot.reportPayLaterBalances.length ? snapshot.reportPayLaterBalances.map((balance) => (
@@ -335,22 +379,49 @@ function ReportDetailContent({ detailView, snapshot }: { detailView: string; sna
   );
 }
 
-function ProductFinancialBreakdown({ products }: { products: ReportsSnapshot["productPerformance"] }) {
+function CapitalBreakdown({ products }: { products: ReportsSnapshot["productPerformance"] }) {
   return products.length ? (
     <Stack spacing={3}>
       {products.map((product) => (
         <Box key={product.productId} bg="canvas.50" borderRadius="20px" p={4}>
           <Text fontWeight="900">{product.productName}</Text>
-          <Text color="canvas.700" mt={1}>
-            {formatCurrency(product.expectedRevenue)} gross sales · {formatCurrency(product.cogs)} capital used
-          </Text>
-          <Text color="canvas.700" mt={1}>
-            {formatCurrency(product.grossProfit)} gross profit · {formatPercent(product.grossMargin)} margin
-          </Text>
+          <Text color="canvas.700" mt={1}>{product.unitsTaken} taken · {formatCurrency(product.cogs)} capital used</Text>
         </Box>
       ))}
     </Stack>
-  ) : <Text color="canvas.700">No product sales in this reporting range.</Text>;
+  ) : <Text color="canvas.700">No product cost recorded in this reporting range.</Text>;
+}
+
+function FinancialCalculation({ snapshot }: { snapshot: ReportsSnapshot }) {
+  const grossSales = snapshot.summary.totalPayments;
+  const grossProfit = grossSales - snapshot.summary.cogs;
+  const grossMargin = grossSales > 0 ? (grossProfit / grossSales) * 100 : null;
+  return (
+    <Stack spacing={4}>
+      <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
+        <DetailValue label="Recorded gross sales" value={formatCurrency(grossSales)} />
+        <DetailValue label="Less: capital used" value={formatCurrency(snapshot.summary.cogs)} />
+        <DetailValue label="Cash-basis gross profit" value={formatCurrency(grossProfit)} />
+        <DetailValue label="Cash-basis gross margin" value={formatPercent(grossMargin)} />
+      </SimpleGrid>
+      <Text color="canvas.700">Payments cannot always be assigned to individual products, so actual profit is calculated for the selected period rather than estimated per product.</Text>
+    </Stack>
+  );
+}
+
+function PaymentRecordList({ records }: { records: ReportsSnapshot["reportPaymentRecords"] }) {
+  return records.length ? (
+    <Stack spacing={3}>
+      {records.map((record) => (
+        <Box key={record.id} bg="canvas.50" borderRadius="20px" p={4}>
+          <Text fontWeight="900">{record.method} · {formatCurrency(record.amount)}</Text>
+          <Text color="canvas.700" mt={1}>{record.cycleLabel} · {formatManilaDateTime(record.occurredAt)}</Text>
+          {record.personLabel ? <Text mt={1}>Person: {record.personLabel}</Text> : null}
+          {record.note ? <Text color="canvas.700" mt={2}>{record.note}</Text> : null}
+        </Box>
+      ))}
+    </Stack>
+  ) : <Text color="canvas.700">No matching payment records in this reporting range.</Text>;
 }
 
 function CycleBreakdown({ cycles, detailView }: { cycles: ReportsSnapshot["reportCycles"]; detailView: string }) {
@@ -370,6 +441,9 @@ function CycleBreakdown({ cycles, detailView }: { cycles: ReportsSnapshot["repor
 
 function cycleDetailValue(cycle: ReportsSnapshot["reportCycles"][number], detailView: string) {
   if (detailView === "immediateCollected") return `${formatCurrency(cycle.immediateCollected)} collected`;
+  if (detailView === "totalPayments") return `${formatCurrency(cycle.totalPayments)} total collected`;
+  if (detailView === "cashPayments") return `${formatCurrency(cycle.physicalCashCollected)} cash`;
+  if (detailView === "onlinePayments") return `${formatCurrency(cycle.onlinePayments)} online`;
   if (detailView === "bottlesTaken") return `${cycle.bottlesTaken} bottles taken`;
   if (detailView === "expectedRevenue") return `${formatCurrency(cycle.expectedRevenue)} expected`;
   if (detailView === "disclosure") return `${formatPercent(cycle.disclosureRate)} disclosed · ${cycle.selfReportedBottles} self-reported`;

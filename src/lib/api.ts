@@ -7,8 +7,10 @@ import {
   CheckBoxDraftPayload,
   CheckBoxPreview,
   CheckBoxRefillInput,
+  CycleCashFloatDetail,
   CycleDetail,
   CycleHonestyDetail,
+  CyclePaymentDetail,
   CycleStatus,
   DetectedCycle,
   DisclosureCollectionReport,
@@ -22,6 +24,8 @@ import {
   Product,
   ProductUpsertInput,
   ReportDrilldown,
+  ReportCashFloatDetail,
+  ReportPaymentDetail,
   ReportsSnapshot,
   Settings,
   SetupProductInput,
@@ -108,16 +112,44 @@ export async function addStockToActiveCycle(input: {
 }
 
 export async function fetchCheckBoxDraft() {
-  return rpc<CheckBoxDraftPayload | null>("get_check_box_draft");
+  const draft = await rpc<CheckBoxDraftPayload | null>("get_check_box_draft");
+  if (!draft) return null;
+  try {
+    const float = await fetchCycleCashFloatDetail(draft.cycleId);
+    return {
+      ...draft,
+      openingChangeFloat: float.openingChangeFloat,
+      openingChangeFloatSource: float.openingChangeFloatSource,
+    };
+  } catch (error) {
+    if (isMissingRpcError(error, "get_cycle_cash_float_detail")) return draft;
+    throw error;
+  }
 }
 
 export async function previewBoxCheck(input: {
   cashCollected: string;
+  cashCountedBeforeWithdrawal?: string;
+  closingChangeFloat?: string;
+  cashAddedForChange?: string;
+  cashAddedForChangeNote?: string;
   gcashCollected: string;
   mayaCollected: string;
   counts: CheckBoxCountInput[];
   nonSaleRemovals: NonSaleRemovalInput[];
 }) {
+  if (input.cashCountedBeforeWithdrawal !== undefined && input.closingChangeFloat !== undefined) {
+    return rpc<CheckBoxPreview>("preview_box_check_with_float", {
+      p_cash_counted_before_withdrawal: input.cashCountedBeforeWithdrawal,
+      p_closing_change_float: input.closingChangeFloat,
+      p_gcash_collected: input.gcashCollected,
+      p_maya_collected: input.mayaCollected,
+      p_counts: input.counts,
+      p_non_sale_removals: input.nonSaleRemovals,
+      p_tracked_non_sales_cash_added: input.cashAddedForChange ?? "0",
+      p_cash_addition_note: input.cashAddedForChangeNote ?? null,
+    });
+  }
   return rpc<CheckBoxPreview>("preview_box_check", {
     p_cash_collected: input.cashCollected,
     p_gcash_collected: input.gcashCollected,
@@ -129,6 +161,10 @@ export async function previewBoxCheck(input: {
 
 export async function completeBoxCheck(input: {
   cashCollected: string;
+  cashCountedBeforeWithdrawal?: string;
+  closingChangeFloat?: string;
+  cashAddedForChange?: string;
+  cashAddedForChangeNote?: string;
   gcashCollected: string;
   mayaCollected: string;
   counts: CheckBoxCountInput[];
@@ -137,6 +173,21 @@ export async function completeBoxCheck(input: {
   note?: string;
   idempotencyKey: string;
 }) {
+  if (input.cashCountedBeforeWithdrawal !== undefined && input.closingChangeFloat !== undefined) {
+    return rpc<BoxCheckCompletion>("complete_box_check_with_float", {
+      p_cash_counted_before_withdrawal: input.cashCountedBeforeWithdrawal,
+      p_closing_change_float: input.closingChangeFloat,
+      p_gcash_collected: input.gcashCollected,
+      p_maya_collected: input.mayaCollected,
+      p_counts: input.counts,
+      p_non_sale_removals: input.nonSaleRemovals,
+      p_refill_items: input.refillItems,
+      p_note: input.note ?? null,
+      p_tracked_non_sales_cash_added: input.cashAddedForChange ?? "0",
+      p_cash_addition_note: input.cashAddedForChangeNote ?? null,
+      p_idempotency_key: input.idempotencyKey,
+    });
+  }
   return rpc<BoxCheckCompletion>("complete_box_check", {
     p_cash_collected: input.cashCollected,
     p_gcash_collected: input.gcashCollected,
@@ -277,6 +328,35 @@ export async function fetchCycleDisclosureAndCollection(cycleId: string) {
   });
 }
 
+export async function fetchCyclePaymentDetail(cycleId: string) {
+  const [payments, float] = await Promise.all([
+    rpc<CyclePaymentDetail>("get_cycle_payment_detail", { p_cycle_id: cycleId }),
+    fetchCycleCashFloatDetail(cycleId).catch((error) => {
+      if (isMissingRpcError(error, "get_cycle_cash_float_detail")) return null;
+      throw error;
+    }),
+  ]);
+  return reconcileCycleCashPayments(payments, float);
+}
+
+export async function fetchCycleCashFloatDetail(cycleId: string) {
+  return rpc<CycleCashFloatDetail>("get_cycle_cash_float_detail", { p_cycle_id: cycleId });
+}
+
+export async function updateCycleChangeFloat(input: {
+  cycleId: string;
+  openingChangeFloat?: string;
+  closingChangeFloat?: string;
+  reason: string;
+}) {
+  return rpc<CycleCashFloatDetail>("update_cycle_change_float", {
+    p_cycle_id: input.cycleId,
+    p_opening_change_float: input.openingChangeFloat ?? null,
+    p_closing_change_float: input.closingChangeFloat ?? null,
+    p_reason: input.reason,
+  });
+}
+
 /** @deprecated Use fetchCycleDisclosureAndCollection. */
 export const fetchCycleHonesty = fetchCycleDisclosureAndCollection;
 
@@ -383,7 +463,7 @@ export async function deleteRetroactiveOnlinePayment(id: string) {
 }
 
 export async function fetchReportsSnapshot(rangeKey: string) {
-  const [snapshot, balances, disclosureCollection, drilldown] = await Promise.all([
+  const [snapshot, balances, disclosureCollection, drilldown, paymentDetail, cashFloatDetail] = await Promise.all([
     rpc<Partial<ReportsSnapshot> | null>("get_reports_snapshot", {
       p_range_key: rangeKey,
       p_start_date: null,
@@ -406,9 +486,28 @@ export async function fetchReportsSnapshot(rangeKey: string) {
       if (isMissingRpcError(error, "get_report_drilldown")) return null;
       throw error;
     }),
+    rpc<Partial<ReportPaymentDetail> | null>("get_report_payment_detail", {
+      p_range_key: rangeKey,
+      p_start_date: null,
+      p_end_date: null,
+    }).catch((error) => {
+      if (isMissingRpcError(error, "get_report_payment_detail")) return null;
+      throw error;
+    }),
+    rpc<ReportCashFloatDetail | null>("get_report_change_float_detail", {
+      p_range_key: rangeKey,
+      p_start_date: null,
+      p_end_date: null,
+    }).catch((error) => {
+      if (isMissingRpcError(error, "get_report_change_float_detail")) return null;
+      throw error;
+    }),
   ]);
 
-  return normalizeReportsSnapshot(snapshot, rangeKey, balances, disclosureCollection, drilldown);
+  const reconciledPaymentDetail = paymentDetail && cashFloatDetail
+    ? reconcileReportCashPayments(paymentDetail as ReportPaymentDetail, cashFloatDetail)
+    : paymentDetail;
+  return normalizeReportsSnapshot(snapshot, rangeKey, balances, disclosureCollection, drilldown, reconciledPaymentDetail, cashFloatDetail);
 }
 
 export async function fetchSettings() {
@@ -471,6 +570,8 @@ function normalizeReportsSnapshot(
   balances: PayLaterBalance[] = [],
   disclosureCollection: Partial<DisclosureCollectionReport> | null = null,
   drilldown: Partial<ReportDrilldown> | null = null,
+  paymentDetail: Partial<ReportPaymentDetail> | null = null,
+  cashFloatDetail: ReportCashFloatDetail | null = null,
 ): ReportsSnapshot {
   const source = (snapshot ?? {}) as Record<string, unknown>;
   const legacyMetrics =
@@ -518,6 +619,32 @@ function normalizeReportsSnapshot(
   const fallbackOutstandingAmount = balances.reduce((sum, balance) => sum + balance.remainingAmount, 0);
   const hasLegacyMetricsShape = legacyMetrics !== null || Array.isArray(source.items);
   const disclosureSummary = disclosureCollection?.summary;
+  const dynamicPayments = paymentDetail?.summary;
+  const dynamicTotalPayments = dynamicPayments?.totalPayments ?? disclosureSummary?.totalPayments ?? 0;
+  const dynamicDifference = dynamicTotalPayments - (snapshot?.summary?.expectedRevenue ?? legacyExpectedRevenue);
+  const paymentCyclesById = new Map((paymentDetail?.cycles ?? []).map((cycle) => [cycle.cycleId, cycle]));
+  const reportCycles = (drilldown?.cycles ?? []).map((cycle) => {
+    const payments = paymentCyclesById.get(cycle.cycleId);
+    if (!payments) return cycle;
+    const currentlyDue = cycle.paymentRequiredAmount;
+    const collectionRate = currentlyDue > 0 ? Math.min((payments.totalPayments / currentlyDue) * 100, 100) : null;
+    return {
+      ...cycle,
+      physicalCashCollected: payments.cashPayments,
+      onlinePayments: payments.onlinePayments,
+      totalPayments: payments.totalPayments,
+      collectionRate,
+      outstandingRequiredAmount: Math.max(currentlyDue - payments.totalPayments, 0),
+      unaccountedAmount: Math.max(currentlyDue - payments.totalPayments, 0),
+    };
+  });
+  const paymentCyclesAscending = [...(paymentDetail?.cycles ?? [])].sort(
+    (left, right) => new Date(left.completedAt).getTime() - new Date(right.completedAt).getTime(),
+  );
+  const dynamicExpectedVsCollected = expectedVsCollected.map((item, index) => ({
+    ...item,
+    totalCollected: paymentCyclesAscending[index]?.totalPayments ?? item.totalCollected,
+  }));
 
   return {
     rangeKey: snapshot?.rangeKey ?? rangeKey,
@@ -525,8 +652,8 @@ function normalizeReportsSnapshot(
       completedCycles: snapshot?.summary?.completedCycles ?? expectedVsCollected.length,
       expectedRevenue: snapshot?.summary?.expectedRevenue ?? legacyExpectedRevenue,
       totalCollected: snapshot?.summary?.totalCollected ?? legacyPaymentsReceived,
-      paymentsReceived: snapshot?.summary?.paymentsReceived ?? legacyPaymentsReceived,
-      differenceAmount: snapshot?.summary?.differenceAmount ?? 0,
+      paymentsReceived: dynamicTotalPayments || snapshot?.summary?.paymentsReceived || legacyPaymentsReceived,
+      differenceAmount: paymentDetail ? dynamicDifference : snapshot?.summary?.differenceAmount ?? 0,
       averageHonestyRate: snapshot?.summary?.averageHonestyRate ?? legacyCollectionRate,
       averageCollectionMatchRate:
         snapshot?.summary?.averageCollectionMatchRate ?? legacyCollectionRate,
@@ -540,9 +667,11 @@ function normalizeReportsSnapshot(
       outstandingAmount:
         snapshot?.summary?.outstandingAmount ??
         (hasLegacyMetricsShape ? fallbackOutstandingAmount : 0),
-      unaccountedAmount: snapshot?.summary?.unaccountedAmount ?? 0,
-      totalShort: snapshot?.summary?.totalShort ?? 0,
-      totalOver: snapshot?.summary?.totalOver ?? 0,
+      unaccountedAmount: paymentDetail
+        ? reportCycles.reduce((sum, cycle) => sum + cycle.unaccountedAmount, 0)
+        : snapshot?.summary?.unaccountedAmount ?? 0,
+      totalShort: paymentDetail ? Math.max(-dynamicDifference, 0) : snapshot?.summary?.totalShort ?? 0,
+      totalOver: paymentDetail ? Math.max(dynamicDifference, 0) : snapshot?.summary?.totalOver ?? 0,
       bottlesTaken: snapshot?.summary?.bottlesTaken ?? 0,
       cogs: snapshot?.summary?.cogs ?? 0,
       grossProfit: snapshot?.summary?.grossProfit ?? legacyGrossProfit,
@@ -561,25 +690,102 @@ function normalizeReportsSnapshot(
       knownUnpaidBottles: disclosureSummary?.knownUnpaidBottles ?? 0,
       knownUnpaidAmount: disclosureSummary?.knownUnpaidAmount ?? 0,
       disclosureRate: disclosureSummary?.disclosureRate ?? null,
-      collectionRate: disclosureSummary?.collectionRate ?? null,
+      collectionRate:
+        disclosureSummary && disclosureSummary.paymentRequiredAmount > 0
+          ? Math.min((dynamicTotalPayments / disclosureSummary.paymentRequiredAmount) * 100, 100)
+          : disclosureSummary?.collectionRate ?? null,
       paymentRequiredAmount: disclosureSummary?.paymentRequiredAmount ?? 0,
       payLaterAmount: disclosureSummary?.payLaterAmount ?? 0,
       complimentaryValue: disclosureSummary?.complimentaryValue ?? 0,
-      totalPayments: disclosureSummary?.totalPayments ?? 0,
-      outstandingRequiredAmount: disclosureSummary?.outstandingRequiredAmount ?? 0,
+      totalPayments: dynamicTotalPayments,
+      cashPayments: dynamicPayments?.cashPayments ?? 0,
+      onlinePayments: dynamicPayments?.onlinePayments ?? 0,
+      outstandingRequiredAmount: disclosureSummary
+        ? Math.max(disclosureSummary.paymentRequiredAmount - dynamicTotalPayments, 0)
+        : 0,
     },
-    expectedVsCollected,
+    expectedVsCollected: dynamicExpectedVsCollected,
     bottlesTaken,
     honestyTrend,
     accountedTrend,
     productPerformance,
     disclosureCollectionTrend: disclosureCollection?.cycleTrend ?? [],
     knownUnpaidRecords: disclosureCollection?.knownUnpaidRecords ?? [],
-    reportCycles: drilldown?.cycles ?? [],
+    reportCycles,
     reportBottleRecords: drilldown?.bottleRecords ?? [],
     reportOnlinePayments: drilldown?.onlinePayments ?? [],
     reportPayLaterBalances: drilldown?.payLaterBalances ?? [],
     reportPaymentReceipts: drilldown?.paymentReceipts ?? [],
+    reportPaymentRecords: paymentDetail?.records ?? [],
+    reportCashFloats: cashFloatDetail?.cycles ?? [],
+    cashFloatSummary: cashFloatDetail?.summary ?? {
+      cashCounted: 0,
+      cashGenerated: 0,
+      cashWithdrawn: 0,
+      unknownOpeningFloatCycles: 0,
+    },
+  };
+}
+
+function reconcileCycleCashPayments(
+  payments: CyclePaymentDetail,
+  float: CycleCashFloatDetail | null,
+): CyclePaymentDetail {
+  if (float?.cashGenerated == null) return payments;
+  const legacyRecord = payments.records.find(
+    (record) => record.channel === "cash" && record.source === "cycle_check_total",
+  );
+  const legacyCash = legacyRecord?.amount ?? 0;
+  const records = legacyRecord
+    ? payments.records.map((record) => record.id === legacyRecord.id ? {
+        ...record,
+        amount: float.cashGenerated ?? record.amount,
+        note: "Customer cash generated after removing the opening change float and including interim withdrawals.",
+      } : record)
+    : payments.records;
+  const cashPayments = payments.summary.cashPayments - legacyCash + float.cashGenerated;
+  return {
+    ...payments,
+    summary: {
+      cashPayments,
+      onlinePayments: payments.summary.onlinePayments,
+      totalPayments: cashPayments + payments.summary.onlinePayments,
+    },
+    records,
+  };
+}
+
+function reconcileReportCashPayments(
+  payments: ReportPaymentDetail,
+  floats: ReportCashFloatDetail,
+): ReportPaymentDetail {
+  const floatsByCycle = new Map(floats.cycles.map((float) => [float.cycleId, float]));
+  const records = payments.records.map((record) => {
+    const float = floatsByCycle.get(record.cycleId);
+    if (record.channel !== "cash" || record.source !== "cycle_check_total" || float?.cashGenerated == null) return record;
+    return {
+      ...record,
+      amount: float.cashGenerated,
+      note: "Customer cash generated after removing the opening change float and including interim withdrawals.",
+    };
+  });
+  const cycles = payments.cycles.map((cycle) => {
+    const float = floatsByCycle.get(cycle.cycleId);
+    if (float?.cashGenerated == null) return cycle;
+    const legacyCash = payments.records
+      .filter((record) => record.cycleId === cycle.cycleId && record.channel === "cash" && record.source === "cycle_check_total")
+      .reduce((sum, record) => sum + record.amount, 0);
+    const cashPayments = cycle.cashPayments - legacyCash + float.cashGenerated;
+    return { ...cycle, cashPayments, totalPayments: cashPayments + cycle.onlinePayments };
+  });
+  return {
+    summary: {
+      cashPayments: cycles.reduce((sum, cycle) => sum + cycle.cashPayments, 0),
+      onlinePayments: cycles.reduce((sum, cycle) => sum + cycle.onlinePayments, 0),
+      totalPayments: cycles.reduce((sum, cycle) => sum + cycle.totalPayments, 0),
+    },
+    cycles,
+    records,
   };
 }
 

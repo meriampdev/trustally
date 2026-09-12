@@ -80,12 +80,12 @@ export default function CashMovementsPage() {
 
   return (
     <Stack spacing={5}>
-      <SectionCard eyebrow="Cash removed" title="Record cash removed, returned, or corrected">
+      <SectionCard eyebrow="Cash movement" title="Record cash removed or corrected">
+        <Text color="canvas.700" mb={4}>Left for Change is recorded during Check Box so there is only one closing-float value.</Text>
         <Stack spacing={4}>
           <FormField label="Movement type">
             <Select value={type} onChange={(event) => setType(event.target.value)}>
               <option value="CASH_REMOVED">Cash removed</option>
-              <option value="CASH_RETURNED">Cash returned</option>
               <option value="CASH_CORRECTION">Cash correction</option>
             </Select>
           </FormField>
@@ -142,6 +142,7 @@ function defaultDateTimeLocal() {
 }
 
 function formatMovementType(value: string) {
+  if (value === "CASH_RETURNED") return "Left for Change (legacy)";
   return value
     .toLowerCase()
     .split("_")

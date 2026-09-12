@@ -2,9 +2,13 @@
 // Keep in sync with `supabase gen types` when a full generated schema is introduced.
 import type {
   CycleHonestyDetail,
+  CycleCashFloatDetail,
+  CyclePaymentDetail,
   DisclosureSource,
   PaymentExpectation,
   PersonHonestySummary,
+  ReportPaymentDetail,
+  ReportCashFloatDetail,
 } from "./types";
 
 export interface DisclosureCollectionDatabaseTypes {
@@ -63,6 +67,31 @@ export interface DisclosureCollectionDatabaseTypes {
     get_person_honesty: {
       Args: { p_cycle_id?: string | null; p_start_at?: string | null; p_end_at?: string | null };
       Returns: PersonHonestySummary[];
+    };
+    get_cycle_payment_detail: {
+      Args: { p_cycle_id: string };
+      Returns: CyclePaymentDetail;
+    };
+    get_report_payment_detail: {
+      Args: { p_range_key?: string; p_start_date?: string | null; p_end_date?: string | null };
+      Returns: ReportPaymentDetail;
+    };
+    get_cycle_cash_float_detail: {
+      Args: { p_cycle_id: string };
+      Returns: CycleCashFloatDetail;
+    };
+    get_report_change_float_detail: {
+      Args: { p_range_key?: string; p_start_date?: string | null; p_end_date?: string | null };
+      Returns: ReportCashFloatDetail;
+    };
+    update_cycle_change_float: {
+      Args: {
+        p_cycle_id: string;
+        p_opening_change_float?: string | null;
+        p_closing_change_float?: string | null;
+        p_reason: string;
+      };
+      Returns: CycleCashFloatDetail;
     };
   };
 }

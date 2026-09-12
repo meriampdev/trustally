@@ -11,12 +11,15 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { MetricCard } from "../components/MetricCard";
+import { PaymentDetailsModal } from "../components/PaymentDetailsModal";
 import { SectionCard } from "../components/SectionCard";
 import { useCurrentLocation } from "../lib/location";
 import {
   fetchCashMovements,
+  fetchCycleCashFloatDetail,
   fetchCycleDetail,
   fetchCycleDisclosureAndCollection,
+  fetchCyclePaymentDetail,
   fetchHistoryFeed,
   fetchHomeDashboard,
   fetchOutstandingBalances,
@@ -30,7 +33,7 @@ import {
   formatDurationFromNow,
   formatPercent,
 } from "../lib/format";
-import { CashMovement, CycleDetail, CycleHonestyDetail, HistoryItem, HomeDashboard, PayLaterBalance, Product, ReportsSnapshot } from "../lib/types";
+import { CashMovement, CycleCashFloatDetail, CycleDetail, CycleHonestyDetail, CyclePaymentDetail, CyclePaymentRecord, HistoryItem, HomeDashboard, PayLaterBalance, Product, ReportsSnapshot } from "../lib/types";
 
 type MetricsRange = "latest" | "7d" | "30d" | "month" | "3m" | "6m" | "1y";
 
@@ -54,6 +57,10 @@ export default function HomePage() {
   const [cashMovements, setCashMovements] = useState<CashMovement[]>([]);
   const [recentHonesty, setRecentHonesty] = useState<CycleHonestyDetail | null>(null);
   const [recentCycleDetail, setRecentCycleDetail] = useState<CycleDetail | null>(null);
+  const [recentCyclePayments, setRecentCyclePayments] = useState<CyclePaymentDetail | null>(null);
+  const [recentCashFloat, setRecentCashFloat] = useState<CycleCashFloatDetail | null>(null);
+  const [currentCashFloat, setCurrentCashFloat] = useState<CycleCashFloatDetail | null>(null);
+  const [paymentDetailView, setPaymentDetailView] = useState<CyclePaymentRecord["channel"] | "all" | null>(null);
   const [metricsRange, setMetricsRange] = useState<MetricsRange>("latest");
   const [rangeMetrics, setRangeMetrics] = useState<ReportsSnapshot | null>(null);
   const [isMetricsLoading, setIsMetricsLoading] = useState(false);
@@ -119,14 +126,19 @@ export default function HomePage() {
       setOutstandingBalances(nextOutstandingBalances);
       setCashMovements(nextCashMovements);
       const recentCycleId = nextDashboard.recentResult?.cycleId;
-      const [nextHonesty, nextCycleDetail] = recentCycleId
+      const [nextHonesty, nextCycleDetail, nextCyclePayments, nextRecentCashFloat] = recentCycleId
         ? await Promise.all([
             fetchCycleDisclosureAndCollection(recentCycleId),
             fetchCycleDetail(recentCycleId),
+            fetchCyclePaymentDetail(recentCycleId),
+            fetchCycleCashFloatDetail(recentCycleId),
           ])
-        : [null, null];
+        : [null, null, null, null];
       setRecentHonesty(nextHonesty);
       setRecentCycleDetail(nextCycleDetail);
+      setRecentCyclePayments(nextCyclePayments);
+      setRecentCashFloat(nextRecentCashFloat);
+      setCurrentCashFloat(nextDashboard.currentCycle?.id ? await fetchCycleCashFloatDetail(nextDashboard.currentCycle.id) : null);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Could not load your box.");
     } finally {
@@ -202,51 +214,60 @@ export default function HomePage() {
     .reduce((sum, movement) => sum + movement.amount, 0);
   const cashReturnedSinceLastVisit = cycleCashMovements
     .filter((movement) => movement.type === "CASH_RETURNED")
-    .reduce((sum, movement) => sum + movement.amount, 0);
-  const estimatedPhysicalCash =
-    dashboard.currentCycle?.estimatedPhysicalCash ??
-    (cashRemovedSinceLastVisit > 0 || cashReturnedSinceLastVisit > 0
-      ? Math.max(cashReturnedSinceLastVisit - cashRemovedSinceLastVisit, 0)
-      : null);
+    .reduce<(typeof cycleCashMovements)[number] | null>((latest, movement) => (
+      !latest || new Date(movement.occurredAt).getTime() > new Date(latest.occurredAt).getTime()
+        ? movement
+        : latest
+    ), null)?.amount ?? 0;
+  const estimatedPhysicalCash = currentCashFloat?.openingChangeFloat == null
+    ? null
+    : Math.max(currentCashFloat.openingChangeFloat - cashRemovedSinceLastVisit, 0);
   const isLatestMetrics = metricsRange === "latest";
   const metricsAvailable = isLatestMetrics ? Boolean(dashboard.recentResult) : Boolean(rangeMetrics);
   const metricsTitle = isLatestMetrics
     ? dashboard.recentResult?.label ?? "No completed checks yet"
     : metricsRangeOptions.find((option) => option.value === metricsRange)?.label ?? "Selected period";
   const metricsHonestyRate = isLatestMetrics ? recentHonesty?.summary.disclosureRate ?? null : rangeMetrics?.summary.disclosureRate ?? null;
-  const metricsCollectionRate = isLatestMetrics
-    ? recentHonesty?.summary.collectionRate ?? dashboard.recentResult?.settledRate ?? null
-    : rangeMetrics?.summary.collectionRate ?? null;
-  const metricsUnaccounted = isLatestMetrics ? dashboard.recentResult?.unaccountedAmount ?? 0 : rangeMetrics?.summary.unaccountedAmount ?? 0;
-  const metricsPaymentGap = isLatestMetrics
-    ? recentHonesty?.summary.outstandingRequiredAmount ?? 0
-    : rangeMetrics?.summary.outstandingRequiredAmount ?? 0;
+  const metricsPaymentTotal = isLatestMetrics
+    ? recentCyclePayments?.summary.totalPayments ?? recentHonesty?.summary.totalPayments ?? dashboard.recentResult?.immediatePayments ?? 0
+    : rangeMetrics?.summary.totalPayments ?? 0;
+  const metricsRequiredAmount = isLatestMetrics
+    ? recentHonesty?.summary.currentlyDueAmount ?? dashboard.recentResult?.expectedRevenue ?? 0
+    : rangeMetrics?.summary.paymentRequiredAmount ?? 0;
+  const metricsCollectionRate = metricsRequiredAmount > 0
+    ? Math.min((metricsPaymentTotal / metricsRequiredAmount) * 100, 100)
+    : null;
+  const metricsUnaccounted = Math.max(metricsRequiredAmount - metricsPaymentTotal, 0);
+  const metricsPaymentGap = metricsUnaccounted;
   const metricsPayLaterOutstanding = isLatestMetrics
     ? outstandingBalances
         .filter((balance) => balance.sourceCycleId === dashboard.recentResult?.cycleId)
         .reduce((total, balance) => total + balance.remainingAmount, 0)
     : (rangeMetrics?.reportPayLaterBalances ?? []).reduce((total, balance) => total + balance.remainingAmount, 0);
   const metricsExpectedCollection = isLatestMetrics
-    ? recentHonesty?.summary.currentlyDueAmount ?? dashboard.recentResult?.expectedRevenue ?? 0
+    ? metricsRequiredAmount
     : rangeMetrics?.summary.paymentRequiredAmount ?? 0;
-  const metricsActualCollection = isLatestMetrics
-    ? recentHonesty?.summary.totalPayments ?? dashboard.recentResult?.immediatePayments ?? 0
-    : rangeMetrics?.summary.totalPayments ?? 0;
+  const metricsActualCollection = metricsPaymentTotal;
+  const metricsCashPayments = isLatestMetrics
+    ? recentCyclePayments?.summary.cashPayments ?? recentHonesty?.summary.physicalCashCollected ?? 0
+    : rangeMetrics?.summary.cashPayments ?? 0;
+  const metricsOnlinePayments = isLatestMetrics
+    ? recentCyclePayments?.summary.onlinePayments ?? recentHonesty?.summary.onlinePayments ?? 0
+    : rangeMetrics?.summary.onlinePayments ?? 0;
+  const metricsPaymentRecords = isLatestMetrics
+    ? recentCyclePayments?.records ?? []
+    : rangeMetrics?.reportPaymentRecords ?? [];
   const metricsSelfReported = isLatestMetrics ? recentHonesty?.summary.selfReportedBottles ?? 0 : rangeMetrics?.summary.selfReportedBottles ?? 0;
   const metricsUnattributed = isLatestMetrics ? recentHonesty?.summary.unattributedMissingBottles ?? 0 : rangeMetrics?.summary.unattributedMissingBottles ?? 0;
   const metricsUnclassified = isLatestMetrics ? recentHonesty?.summary.unclassifiedHistoricalRecords ?? 0 : rangeMetrics?.summary.unclassifiedHistoricalRecords ?? 0;
-  const metricsGrossSales = isLatestMetrics
-    ? recentCycleDetail?.totals.expectedRevenue ?? dashboard.recentResult?.expectedRevenue ?? 0
-    : rangeMetrics?.summary.expectedRevenue ?? 0;
+  const metricsGrossSales = metricsPaymentTotal;
   const metricsCapitalUsed = isLatestMetrics
     ? recentCycleDetail?.totals.cogs ?? 0
     : rangeMetrics?.summary.cogs ?? 0;
-  const metricsGrossProfit = isLatestMetrics
-    ? recentCycleDetail?.totals.grossProfit ?? 0
-    : rangeMetrics?.summary.grossProfit ?? 0;
-  const metricsGrossMargin = isLatestMetrics
-    ? recentCycleDetail?.totals.grossMargin ?? null
-    : rangeMetrics?.summary.grossMargin ?? null;
+  const metricsGrossProfit = metricsGrossSales - metricsCapitalUsed;
+  const metricsGrossMargin = metricsGrossSales > 0
+    ? (metricsGrossProfit / metricsGrossSales) * 100
+    : null;
 
   return (
     <Stack spacing={5}>
@@ -296,18 +317,18 @@ export default function HomePage() {
             value={formatCurrency(estimatedPhysicalCash)}
             hint={
               estimatedPhysicalCash == null
-                ? "No recorded cash movements since the last visit"
-                : "Estimated from recorded removals and returns"
+                ? "Opening change float is unknown"
+                : "Known opening float less recorded withdrawals; excludes uncounted customer cash"
             }
           />
           <MetricCard
             label="Unaccounted"
-            value={formatCurrency(dashboard.recentResult?.unaccountedAmount ?? 0)}
+            value={formatCurrency(recentHonesty && recentCyclePayments ? Math.max(recentHonesty.summary.currentlyDueAmount - recentCyclePayments.summary.totalPayments, 0) : dashboard.recentResult?.unaccountedAmount ?? 0)}
             hint="Not yet explained by payment, pay-later, or an authorized adjustment"
           />
           <MetricCard
             label="Known pay-later"
-            value={formatCurrency(dashboard.recentResult?.knownPayLater ?? 0)}
+            value={formatCurrency(recentHonesty?.summary.payLaterAmount ?? dashboard.recentResult?.knownPayLater ?? 0)}
             hint="Recorded as expected later"
           />
           <MetricCard
@@ -317,8 +338,20 @@ export default function HomePage() {
           />
         </SimpleGrid>
         <Text color="canvas.700" mt={3} fontSize="sm">
-          Cash movements since last visit: {formatCurrency(cashRemovedSinceLastVisit)} removed · {formatCurrency(cashReturnedSinceLastVisit)} returned
+          Cash movements since last visit: {formatCurrency(cashRemovedSinceLastVisit)} removed · {formatCurrency(cashReturnedSinceLastVisit)} latest legacy Left for Change
         </Text>
+        {recentCashFloat ? (
+          <Box mt={5}>
+            <Text fontWeight="900" mb={3}>Latest completed cash check</Text>
+            <SimpleGrid columns={{ base: 2, md: 5 }} spacing={4}>
+              <MetricCard label="Opening change float" value={recentCashFloat.openingChangeFloat == null ? "Unknown" : formatCurrency(recentCashFloat.openingChangeFloat)} />
+              <MetricCard label="Cash counted" value={formatCurrency(recentCashFloat.cashCountedBeforeWithdrawal)} />
+              <MetricCard label="Cash generated" value={recentCashFloat.cashGenerated == null ? "Cannot be determined" : formatCurrency(recentCashFloat.cashGenerated)} />
+              <MetricCard label="Left for Change" value={formatCurrency(recentCashFloat.closingChangeFloat)} />
+              <MetricCard label="Cash withdrawn" value={formatCurrency(recentCashFloat.cashWithdrawn)} />
+            </SimpleGrid>
+          </Box>
+        ) : null}
       </SectionCard>
 
       <SectionCard eyebrow="Metrics" title={metricsTitle}>
@@ -350,6 +383,18 @@ export default function HomePage() {
               hint={metricsPaymentGap > 0 ? `${formatCurrency(metricsPaymentGap)} required payment gap` : "No required payment gap"}
             />
             <MetricCard label="Unaccounted" value={formatCurrency(metricsUnaccounted)} hint="Amount not yet explained" />
+            <MetricCard
+              label="Cash payments"
+              value={formatCurrency(metricsCashPayments)}
+              hint="Click to view cash payment details"
+              onClick={() => setPaymentDetailView("cash")}
+            />
+            <MetricCard
+              label="Online payments"
+              value={formatCurrency(metricsOnlinePayments)}
+              hint="Click to view online payment details"
+              onClick={() => setPaymentDetailView("online")}
+            />
             {metricsPayLaterOutstanding > 0 ? (
               <MetricCard
                 label="Outstanding"
@@ -369,7 +414,8 @@ export default function HomePage() {
               <MetricCard
                 label="Gross sales"
                 value={formatCurrency(metricsGrossSales)}
-                hint="Selling value of bottles taken"
+                hint="Actual recorded payments · Click to view"
+                onClick={() => setPaymentDetailView("all")}
               />
               <MetricCard
                 label="Capital used"
@@ -379,7 +425,7 @@ export default function HomePage() {
               <MetricCard
                 label="Gross profit"
                 value={formatCurrency(metricsGrossProfit)}
-                hint="Gross sales less product cost"
+                hint="Recorded money less product cost"
               />
               <MetricCard
                 label="Gross margin"
@@ -388,7 +434,7 @@ export default function HomePage() {
               />
             </SimpleGrid>
             <Text color="canvas.700" fontSize="sm" mt={3}>
-              Net profit is not shown because operating expenses are not tracked yet.
+              Cash-basis sales only. Expected bottle value stays in Expected vs actual collection. Net profit is not shown because operating expenses are not tracked yet.
             </Text>
           </Box>
           {metricsUnclassified > 0 ? <Text color="canvas.700" mt={3}>{metricsUnclassified} historical record{metricsUnclassified === 1 ? " is" : "s are"} still unclassified.</Text> : null}
@@ -544,6 +590,14 @@ export default function HomePage() {
           />
         </SimpleGrid>
       </SectionCard>
+
+      <PaymentDetailsModal
+        isOpen={paymentDetailView !== null}
+        onClose={() => setPaymentDetailView(null)}
+        title={paymentDetailView === "cash" ? "Cash payment details" : paymentDetailView === "online" ? "Online payment details" : "Gross sales payment details"}
+        records={metricsPaymentRecords}
+        channel={paymentDetailView === "cash" || paymentDetailView === "online" ? paymentDetailView : undefined}
+      />
     </Stack>
   );
 }

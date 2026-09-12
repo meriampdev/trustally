@@ -14,7 +14,7 @@ import {
 } from "@chakra-ui/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SectionCard } from "../components/SectionCard";
-import { fetchOutstandingBalances, recordPaymentReceipt } from "../lib/api";
+import { fetchHomeDashboard, fetchOutstandingBalances, recordPaymentReceipt } from "../lib/api";
 import { formatCurrency, formatDateTimeLabel, parseNumberInput } from "../lib/format";
 import { PayLaterBalance } from "../lib/types";
 
@@ -23,6 +23,7 @@ type PaymentFor = "CURRENT" | "PREVIOUS" | "MULTIPLE" | "NOT_SURE";
 export default function PaymentsPage() {
   const toast = useToast();
   const [balances, setBalances] = useState<PayLaterBalance[]>([]);
+  const [currentCycleId, setCurrentCycleId] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("GCASH");
   const [paymentFor, setPaymentFor] = useState<PaymentFor>("PREVIOUS");
@@ -47,7 +48,12 @@ export default function PaymentsPage() {
   async function load() {
     setIsLoading(true);
     try {
-      setBalances(await fetchOutstandingBalances());
+      const [nextBalances, dashboard] = await Promise.all([
+        fetchOutstandingBalances(),
+        fetchHomeDashboard(),
+      ]);
+      setBalances(nextBalances);
+      setCurrentCycleId(dashboard.currentCycle?.id ?? null);
     } finally {
       setIsLoading(false);
     }
@@ -113,6 +119,7 @@ export default function PaymentsPage() {
             : [],
         autoAllocateOldest:
           (paymentFor === "PREVIOUS" || paymentFor === "MULTIPLE") && useAutoAllocate,
+        relatedCycleId: paymentFor === "CURRENT" ? currentCycleId : null,
       });
 
       setAmount("");

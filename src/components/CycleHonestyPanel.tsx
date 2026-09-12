@@ -28,6 +28,7 @@ import {
   deleteRetroactiveUnpaidEntry,
   detectCycleForTransaction,
   fetchCycleDisclosureAndCollection,
+  fetchCyclePaymentDetail,
   fetchPersonHonesty,
   saveBottleTakenRecord,
   saveRetroactiveOnlinePayment,
@@ -43,6 +44,7 @@ import {
 import {
   CycleDetail,
   CycleHonestyDetail,
+  CyclePaymentDetail,
   DetectedCycle,
   DisclosureSource,
   PaymentExpectation,
@@ -53,7 +55,11 @@ import {
 import { MetricCard } from "./MetricCard";
 import { SectionCard } from "./SectionCard";
 
-interface CycleHonestyPanelProps { cycle: CycleDetail; }
+interface CycleHonestyPanelProps {
+  cycle: CycleDetail;
+  paymentDetail?: CyclePaymentDetail | null;
+  onDetailsChange?: (honesty: CycleHonestyDetail, payments: CyclePaymentDetail) => void;
+}
 
 interface BottleFormState {
   id: string | null;
@@ -92,9 +98,10 @@ const expectationLabels: Record<PaymentExpectation, string> = {
   complimentary: "Complimentary",
 };
 
-export function CycleHonestyPanel({ cycle }: CycleHonestyPanelProps) {
+export function CycleHonestyPanel({ cycle, paymentDetail, onDetailsChange }: CycleHonestyPanelProps) {
   const toast = useToast();
   const [detail, setDetail] = useState<CycleHonestyDetail | null>(null);
+  const [livePaymentDetail, setLivePaymentDetail] = useState<CyclePaymentDetail | null>(paymentDetail ?? null);
   const [people, setPeople] = useState<PersonHonestySummary[]>([]);
   const [personStartDate, setPersonStartDate] = useState("");
   const [personEndDate, setPersonEndDate] = useState("");
@@ -119,9 +126,14 @@ export function CycleHonestyPanel({ cycle }: CycleHonestyPanelProps) {
     setIsLoading(true);
     setErrorMessage("");
     try {
-      const nextDetail = await fetchCycleDisclosureAndCollection(cycle.cycleId);
+      const [nextDetail, nextPaymentDetail] = await Promise.all([
+        fetchCycleDisclosureAndCollection(cycle.cycleId),
+        fetchCyclePaymentDetail(cycle.cycleId),
+      ]);
       setDetail(nextDetail);
+      setLivePaymentDetail(nextPaymentDetail);
       setPeople(nextDetail.personSummaries ?? []);
+      onDetailsChange?.(nextDetail, nextPaymentDetail);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Could not load disclosure and payment details.");
     } finally {
@@ -273,7 +285,19 @@ export function CycleHonestyPanel({ cycle }: CycleHonestyPanelProps) {
     );
   }
 
-  const summary = detail.summary;
+  const rawSummary = detail.summary;
+  const totalPayments = livePaymentDetail?.summary.totalPayments ?? rawSummary.totalPayments;
+  const summary = livePaymentDetail ? {
+    ...rawSummary,
+    physicalCashCollected: livePaymentDetail.summary.cashPayments,
+    onlinePayments: livePaymentDetail.summary.onlinePayments,
+    totalPayments,
+    outstandingRequiredAmount: Math.max(rawSummary.currentlyDueAmount - totalPayments, 0),
+    outstandingAmount: Math.max(rawSummary.currentlyDueAmount - totalPayments, 0),
+    collectionRate: rawSummary.currentlyDueAmount > 0
+      ? Math.min((totalPayments / rawSummary.currentlyDueAmount) * 100, 100)
+      : null,
+  } : rawSummary;
   const bottleRecords = detail.bottleTakenRecords ?? detail.unpaidEntries;
   const knownUnpaidRecords = bottleRecords.filter((entry) => entry.paymentStatus === "unpaid" || entry.paymentStatus === "partially_paid");
   const knownUnpaidBottles = knownUnpaidRecords.reduce((total, entry) => total + entry.quantity, 0);

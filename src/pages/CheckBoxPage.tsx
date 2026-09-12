@@ -3,6 +3,13 @@ import {
   Button,
   HStack,
   Input,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
   Select,
   SimpleGrid,
   Spinner,
@@ -24,6 +31,7 @@ import {
   fetchProducts,
   previewBoxCheck,
   recordCycleDifference,
+  updateCycleChangeFloat,
 } from "../lib/api";
 import {
   formatCurrency,
@@ -105,6 +113,10 @@ export default function CheckBoxPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFloatAdjustmentOpen, setIsFloatAdjustmentOpen] = useState(false);
+  const [openingFloatAdjustment, setOpeningFloatAdjustment] = useState("");
+  const [floatAdjustmentReason, setFloatAdjustmentReason] = useState("");
+  const [isSavingFloatAdjustment, setIsSavingFloatAdjustment] = useState(false);
 
   useEffect(() => {
     void load();
@@ -131,23 +143,19 @@ export default function CheckBoxPage() {
       setPayLaterBalances(nextPayLaterBalances);
 
       if (nextDraft) {
-        setDraft(normalizeDraft(loadCheckBoxDraft(nextDraft.cycleId) ?? createInitialDraft(nextDraft)));
+        const latestLegacyClosing = nextCashMovements
+          .filter((movement) => movement.type === "CASH_RETURNED" && new Date(movement.occurredAt).getTime() >= new Date(nextDraft.startedAt).getTime())
+          .reduce<(typeof nextCashMovements)[number] | null>((latest, movement) => (
+            !latest || new Date(movement.occurredAt).getTime() > new Date(latest.occurredAt).getTime()
+              ? movement
+              : latest
+          ), null);
+        setDraft(normalizeDraft(loadCheckBoxDraft(nextDraft.cycleId) ?? createInitialDraft(nextDraft, latestLegacyClosing?.amount ?? 0)));
       }
     } finally {
       setIsLoading(false);
     }
   }
-
-  const moneyTotal = useMemo(() => {
-    if (!draft) {
-      return 0;
-    }
-
-    return ["cashCollected", "gcashCollected", "mayaCollected"].reduce((sum, key) => {
-      const value = Number(draft[key as keyof CheckBoxDraft] as string);
-      return sum + (Number.isFinite(value) ? value : 0);
-    }, 0);
-  }, [draft]);
 
   const cycleCashMovements = useMemo(() => {
     if (!serverDraft) {
@@ -172,9 +180,25 @@ export default function CheckBoxPage() {
     () =>
       cycleCashMovements
         .filter((movement) => movement.type === "CASH_RETURNED")
-        .reduce((sum, movement) => sum + movement.amount, 0),
+        .reduce<(typeof cycleCashMovements)[number] | null>((latest, movement) => (
+          !latest || new Date(movement.occurredAt).getTime() > new Date(latest.occurredAt).getTime()
+            ? movement
+            : latest
+        ), null)?.amount ?? 0,
     [cycleCashMovements],
   );
+
+  const openingChangeFloat = serverDraft?.openingChangeFloat ?? null;
+  const cashCountedBeforeWithdrawal = parseNumberInput(draft?.cashCountedBeforeWithdrawal ?? "0");
+  const closingChangeFloat = parseNumberInput(draft?.closingChangeFloat ?? "0");
+  const cashAddedForChange = parseNumberInput(draft?.cashAddedForChange ?? "0");
+  const cashGenerated = openingChangeFloat == null
+    ? null
+    : cashCountedBeforeWithdrawal + cashRemovedSinceLastVisit - openingChangeFloat - cashAddedForChange;
+  const cashWithdrawn = cashCountedBeforeWithdrawal - closingChangeFloat;
+  const moneyTotal = (cashGenerated ?? 0)
+    + parseNumberInput(draft?.gcashCollected ?? "0")
+    + parseNumberInput(draft?.mayaCollected ?? "0");
 
   const shortfallAmount = preview
     ? Math.max(preview.totals.expectedRevenue - preview.totals.totalCollected, 0)
@@ -228,10 +252,7 @@ export default function CheckBoxPage() {
       immediatePayments + totalKnownPayLater,
     );
     const unaccountedAmount = Math.max(preview.totals.expectedRevenue - accountedAmount, 0);
-    const estimatedPhysicalCash = Math.max(
-      preview.totals.cashCollected + cashReturnedSinceLastVisit - cashRemovedSinceLastVisit,
-      0,
-    );
+    const estimatedPhysicalCash = preview.totals.closingChangeFloat ?? closingChangeFloat;
 
     return {
       ...preview,
@@ -253,13 +274,14 @@ export default function CheckBoxPage() {
         outstandingAmount: totalOutstanding,
         unaccountedAmount,
         cashRemoved: cashRemovedSinceLastVisit,
-        cashReturned: cashReturnedSinceLastVisit,
+        cashReturned: preview.totals.closingChangeFloat ?? closingChangeFloat,
         estimatedPhysicalCash,
       },
     };
   }, [
     cashRemovedSinceLastVisit,
     cashReturnedSinceLastVisit,
+    closingChangeFloat,
     pendingPayLaterAmount,
     preview,
     recordedOutstandingAmount,
@@ -286,11 +308,38 @@ export default function CheckBoxPage() {
   const activeServerDraft = serverDraft;
   const activeDraft = draft;
 
+  async function handleOpeningFloatAdjustment() {
+    if (!floatAdjustmentReason.trim()) {
+      toast({ title: "Reason required", description: "Explain why the opening float is being corrected.", status: "warning", position: "top" });
+      return;
+    }
+    setIsSavingFloatAdjustment(true);
+    try {
+      await updateCycleChangeFloat({
+        cycleId: activeServerDraft.cycleId,
+        openingChangeFloat: openingFloatAdjustment,
+        reason: floatAdjustmentReason,
+      });
+      setIsFloatAdjustmentOpen(false);
+      setFloatAdjustmentReason("");
+      await load();
+      toast({ title: "Opening float updated", description: "The reason was saved in the cash audit trail.", status: "success", position: "top" });
+    } catch (error) {
+      toast({ title: "Could not update opening float", description: error instanceof Error ? error.message : "Please try again.", status: "error", position: "top" });
+    } finally {
+      setIsSavingFloatAdjustment(false);
+    }
+  }
+
   async function handlePreview() {
     setIsPreviewLoading(true);
     try {
       const nextPreview = await previewBoxCheck({
-        cashCollected: activeDraft.cashCollected,
+        cashCollected: String(cashGenerated ?? 0),
+        cashCountedBeforeWithdrawal: activeDraft.cashCountedBeforeWithdrawal,
+        closingChangeFloat: activeDraft.closingChangeFloat,
+        cashAddedForChange: activeDraft.cashAddedForChange,
+        cashAddedForChangeNote: activeDraft.cashAddedForChangeNote,
         gcashCollected: activeDraft.gcashCollected,
         mayaCollected: activeDraft.mayaCollected,
         counts: activeServerDraft.items.map((item) => ({
@@ -322,7 +371,11 @@ export default function CheckBoxPage() {
       const cycleNote = buildCycleNote(activeDraft.note, activeDraft.differenceResolution);
 
       const result = await completeBoxCheck({
-        cashCollected: activeDraft.cashCollected,
+        cashCollected: String(cashGenerated ?? 0),
+        cashCountedBeforeWithdrawal: activeDraft.cashCountedBeforeWithdrawal,
+        closingChangeFloat: activeDraft.closingChangeFloat,
+        cashAddedForChange: activeDraft.cashAddedForChange,
+        cashAddedForChangeNote: activeDraft.cashAddedForChangeNote,
         gcashCollected: activeDraft.gcashCollected,
         mayaCollected: activeDraft.mayaCollected,
         counts: activeServerDraft.items.map((item) => ({
@@ -443,7 +496,7 @@ export default function CheckBoxPage() {
       </SectionCard>
 
       {step === 0 ? (
-        <SectionCard eyebrow="Money" title="Enter the money received since your last visit.">
+        <SectionCard eyebrow="Money" title="Count the cash and record online payments.">
           <Text color="canvas.700">Last checked {formatDateTimeLabel(serverDraft.startedAt)}</Text>
           {(cashRemovedSinceLastVisit > 0 || cashReturnedSinceLastVisit > 0) ? (
             <Box mt={4} borderRadius="24px" bg="canvas.50" p={4}>
@@ -452,21 +505,48 @@ export default function CheckBoxPage() {
                 Cash removed: {formatCurrency(cashRemovedSinceLastVisit)}
               </Text>
               <Text color="canvas.700" mt={1}>
-                Cash returned: {formatCurrency(cashReturnedSinceLastVisit)}
+                Latest legacy Left for Change: {formatCurrency(cashReturnedSinceLastVisit)}
               </Text>
               <Text color="canvas.700" mt={2}>
-                Enter the actual cash you found today. Trustally will keep removals separate from revenue.
+                Previously recorded as “Cash Returned.” Enter today’s final Left for Change below.
               </Text>
             </Box>
           ) : null}
-          <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4} mt={4}>
+          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mt={4}>
+            <Box bg="canvas.50" borderRadius="22px" p={4}>
+              <Text color="canvas.700" fontSize="sm">Opening change float</Text>
+              <Text fontWeight="900" fontSize="xl" mt={1}>{openingChangeFloat == null ? "Unknown" : formatCurrency(openingChangeFloat)}</Text>
+              <Text color="canvas.700" fontSize="sm" mt={1}>Carried from the previous check’s Left for Change.</Text>
+              <Button size="sm" variant="outline" mt={3} onClick={() => {
+                setOpeningFloatAdjustment(openingChangeFloat == null ? "" : String(openingChangeFloat));
+                setIsFloatAdjustmentOpen(true);
+              }}>{openingChangeFloat == null ? "Set opening float" : "Correct opening float"}</Button>
+            </Box>
             <MoneyInput
-              label="Cash collected"
-              value={draft.cashCollected}
+              label="Total cash counted"
+              value={draft.cashCountedBeforeWithdrawal}
               onChange={(value) =>
-                updateDraft(setDraft, setPreview, { cashCollected: value })
+                updateDraft(setDraft, setPreview, { cashCountedBeforeWithdrawal: value })
               }
             />
+            <MoneyInput
+              label="Left for Change"
+              value={draft.closingChangeFloat}
+              onChange={(value) =>
+                updateDraft(setDraft, setPreview, { closingChangeFloat: value })
+              }
+            />
+            <MoneyInput
+              label="Cash added for change (optional)"
+              value={draft.cashAddedForChange}
+              onChange={(value) => updateDraft(setDraft, setPreview, { cashAddedForChange: value })}
+            />
+            {cashAddedForChange > 0 ? (
+              <Box>
+                <Text fontWeight="800" mb={2}>Why was cash added?</Text>
+                <Textarea value={draft.cashAddedForChangeNote} onChange={(event) => updateDraft(setDraft, setPreview, { cashAddedForChangeNote: event.target.value })} placeholder="Required audit note; this money is not revenue" />
+              </Box>
+            ) : null}
             <MoneyInput
               label="GCash"
               value={draft.gcashCollected}
@@ -482,7 +562,15 @@ export default function CheckBoxPage() {
               }
             />
           </SimpleGrid>
-          <MetricCard label="Money received this period" value={formatCurrency(moneyTotal)} />
+          <SimpleGrid columns={{ base: 2, md: 3 }} spacing={4} mt={4}>
+            <MetricCard
+              label="Cash generated"
+              value={cashGenerated == null ? "Cannot be determined" : formatCurrency(cashGenerated)}
+              hint={cashGenerated == null ? "Set the opening change float first" : "Customer cash, separate from the change float"}
+            />
+            <MetricCard label="Cash withdrawn" value={formatCurrency(cashWithdrawn)} hint="Total counted less Left for Change" />
+            <MetricCard label="Total customer payments" value={formatCurrency(moneyTotal)} hint="Cash generated + GCash + Maya" />
+          </SimpleGrid>
           <Button mt={5} onClick={() => setStep(1)}>
             Next: count bottles
           </Button>
@@ -652,24 +740,23 @@ export default function CheckBoxPage() {
               <MetricCard
                 label="Physical cash"
                 value={formatCurrency(resolvedPreview.totals.estimatedPhysicalCash)}
-                hint="Cash entered plus recorded returns, minus recorded removals"
+                hint="The closing float left in the box after this check"
               />
             </SimpleGrid>
           </SectionCard>
 
           <SectionCard eyebrow="Payment breakdown" title="Money collected">
             <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
-              <Text>Cash {formatCurrency(resolvedPreview.totals.cashCollected)}</Text>
+              <Text>Cash generated {formatCurrency(resolvedPreview.totals.cashGenerated)}</Text>
               <Text>GCash {formatCurrency(resolvedPreview.totals.gcashCollected)}</Text>
               <Text>Maya {formatCurrency(resolvedPreview.totals.mayaCollected)}</Text>
+              <Text>Opening change float {formatCurrency(resolvedPreview.totals.openingChangeFloat)}</Text>
+              <Text>Total cash counted {formatCurrency(resolvedPreview.totals.cashCountedBeforeWithdrawal)}</Text>
+              <Text>Left for Change {formatCurrency(resolvedPreview.totals.closingChangeFloat)}</Text>
+              <Text>Cash withdrawn {formatCurrency(resolvedPreview.totals.cashWithdrawn)}</Text>
+              <Text>Interim withdrawals {formatCurrency(resolvedPreview.totals.interimOwnerWithdrawals)}</Text>
+              <Text>Non-sales cash added {formatCurrency(resolvedPreview.totals.trackedNonSalesCashAdded)}</Text>
             </SimpleGrid>
-            {(resolvedPreview.totals.cashRemoved ?? 0) > 0 ||
-            (resolvedPreview.totals.cashReturned ?? 0) > 0 ? (
-              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mt={4}>
-                <Text>Cash removed {formatCurrency(resolvedPreview.totals.cashRemoved)}</Text>
-                <Text>Cash returned {formatCurrency(resolvedPreview.totals.cashReturned)}</Text>
-              </SimpleGrid>
-            ) : null}
           </SectionCard>
 
           {shortfallAmount > 0 ? (
@@ -994,14 +1081,40 @@ export default function CheckBoxPage() {
           </Button>
         </SectionCard>
       ) : null}
+
+      <Modal isOpen={isFloatAdjustmentOpen} onClose={() => setIsFloatAdjustmentOpen(false)} isCentered>
+        <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
+        <ModalContent bg="canvas.100" borderRadius="28px" mx={4}>
+          <ModalHeader>{openingChangeFloat == null ? "Set opening change float" : "Correct opening change float"}</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Text color="canvas.700">This is an explicit adjustment and will remain in the cash audit history.</Text>
+            <Box mt={4}>
+              <MoneyInput label="Opening change float" value={openingFloatAdjustment} onChange={setOpeningFloatAdjustment} />
+            </Box>
+            <Box mt={4}>
+              <Text fontWeight="800" mb={2}>Reason for adjustment</Text>
+              <Textarea value={floatAdjustmentReason} onChange={(event) => setFloatAdjustmentReason(event.target.value)} placeholder="Why is the carried amount being corrected?" />
+            </Box>
+          </ModalBody>
+          <ModalFooter gap={3}>
+            <Button variant="outline" onClick={() => setIsFloatAdjustmentOpen(false)}>Cancel</Button>
+            <Button onClick={() => void handleOpeningFloatAdjustment()} isLoading={isSavingFloatAdjustment}>Save adjustment</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Stack>
   );
 }
 
-function createInitialDraft(payload: CheckBoxDraftPayload): CheckBoxDraft {
+function createInitialDraft(payload: CheckBoxDraftPayload, legacyClosingChangeFloat = 0): CheckBoxDraft {
   return {
     cycleId: payload.cycleId,
     cashCollected: "0",
+    cashCountedBeforeWithdrawal: "0",
+    closingChangeFloat: String(legacyClosingChangeFloat),
+    cashAddedForChange: "0",
+    cashAddedForChangeNote: "",
     gcashCollected: "0",
     mayaCollected: "0",
     counts: Object.fromEntries(
@@ -1017,6 +1130,10 @@ function createInitialDraft(payload: CheckBoxDraftPayload): CheckBoxDraft {
 function normalizeDraft(draft: CheckBoxDraft): CheckBoxDraft {
   return {
     ...draft,
+    cashCountedBeforeWithdrawal: draft.cashCountedBeforeWithdrawal ?? draft.cashCollected ?? "0",
+    closingChangeFloat: draft.closingChangeFloat ?? "0",
+    cashAddedForChange: draft.cashAddedForChange ?? "0",
+    cashAddedForChangeNote: draft.cashAddedForChangeNote ?? "",
     differenceResolution: {
       ...createEmptyDifferenceResolution(),
       ...draft.differenceResolution,

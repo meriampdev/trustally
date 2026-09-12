@@ -102,6 +102,7 @@ export interface HomeDashboard {
     currentAvailableStock: number;
     retailValue: number;
     cashRemoved?: number;
+    /** @deprecated Legacy alias for closingChangeFloat. */
     cashReturned?: number;
     estimatedPhysicalCash?: number | null;
     estimatedRemaining: number | null;
@@ -164,7 +165,12 @@ export interface DifferenceResolutionInput {
 
 export interface CheckBoxDraft {
   cycleId: string;
+  /** @deprecated Compatibility value. New UI derives it as cashGenerated. */
   cashCollected: string;
+  cashCountedBeforeWithdrawal: string;
+  closingChangeFloat: string;
+  cashAddedForChange: string;
+  cashAddedForChangeNote: string;
   gcashCollected: string;
   mayaCollected: string;
   counts: Record<string, string>;
@@ -179,6 +185,8 @@ export interface CheckBoxDraftPayload {
   cycleNumber: number;
   startedAt: string;
   locationName: string;
+  openingChangeFloat?: number | null;
+  openingChangeFloatSource?: "unknown" | "carried_forward" | "explicit";
   items: Array<{
     productId: string;
     productName: string;
@@ -203,6 +211,14 @@ export interface CheckBoxPreview {
     honestyRate: number | null;
     collectionRate?: number | null;
     cashCollected: number;
+    openingChangeFloat?: number | null;
+    cashCountedBeforeWithdrawal?: number | null;
+    cashGenerated?: number | null;
+    closingChangeFloat?: number | null;
+    cashWithdrawn?: number | null;
+    interimOwnerWithdrawals?: number;
+    trackedNonSalesCashAdded?: number;
+    cashAddedForChangeNote?: string | null;
     gcashCollected: number;
     mayaCollected: number;
     cogs: number;
@@ -218,6 +234,7 @@ export interface CheckBoxPreview {
     outstandingAmount?: number;
     unaccountedAmount?: number;
     cashRemoved?: number;
+    /** @deprecated Legacy alias for closingChangeFloat. */
     cashReturned?: number;
     estimatedPhysicalCash?: number | null;
   };
@@ -257,6 +274,9 @@ export interface HistoryItem {
   honestyRate?: number | null;
   collectionRate?: number | null;
   quantity?: number | null;
+  cashPayments?: number | null;
+  onlinePayments?: number | null;
+  cashFloat?: CycleCashFloatDetail | null;
 }
 
 export interface CycleDetail {
@@ -292,6 +312,7 @@ export interface CycleDetail {
     gcashCollected: number;
     mayaCollected: number;
     cashRemoved: number;
+    /** @deprecated Legacy alias for closingChangeFloat. */
     cashReturned: number;
     estimatedPhysicalCash: number;
     cogs: number;
@@ -449,6 +470,87 @@ export interface CycleHonestyDetail {
   personSummaries: PersonHonestySummary[];
 }
 
+export interface CyclePaymentRecord {
+  id: string;
+  cycleId: string;
+  cycleLabel: string;
+  occurredAt: string;
+  recordedAt: string;
+  amount: number;
+  method: PaymentMethod;
+  channel: "cash" | "online";
+  source: "cycle_check_total" | "retroactive" | "allocated_receipt" | "direct_receipt";
+  personLabel?: string | null;
+  referenceNumber?: string | null;
+  note?: string | null;
+  isItemized: boolean;
+}
+
+export interface CyclePaymentDetail {
+  cycleId: string;
+  cycleNumber: number;
+  summary: {
+    cashPayments: number;
+    onlinePayments: number;
+    totalPayments: number;
+  };
+  records: CyclePaymentRecord[];
+}
+
+export interface ChangeFloatAdjustment {
+  id: string;
+  previousOpeningChangeFloat: number | null;
+  newOpeningChangeFloat: number | null;
+  previousClosingChangeFloat: number | null;
+  newClosingChangeFloat: number | null;
+  reason: string;
+  createdAt: string;
+}
+
+export interface CycleCashFloatDetail {
+  cycleId: string;
+  cycleNumber: number;
+  completedAt?: string | null;
+  openingChangeFloat: number | null;
+  openingChangeFloatSource: "unknown" | "carried_forward" | "explicit";
+  cashCountedBeforeWithdrawal: number | null;
+  cashGenerated: number | null;
+  closingChangeFloat: number;
+  cashWithdrawn: number | null;
+  interimOwnerWithdrawals: number;
+  trackedNonSalesCashAdded: number;
+  cashAddedForChangeNote?: string | null;
+  /** @deprecated Legacy alias for closingChangeFloat. */
+  cashReturned: number;
+  adjustments: ChangeFloatAdjustment[];
+}
+
+export interface ReportCashFloatDetail {
+  summary: {
+    cashCounted: number;
+    cashGenerated: number;
+    cashWithdrawn: number;
+    unknownOpeningFloatCycles: number;
+  };
+  cycles: Array<Omit<CycleCashFloatDetail, "cycleNumber" | "adjustments"> & {
+    cycleLabel: string;
+    completedAt: string;
+  }>;
+}
+
+export interface ReportPaymentDetail {
+  summary: CyclePaymentDetail["summary"];
+  cycles: Array<{
+    cycleId: string;
+    cycleLabel: string;
+    completedAt: string;
+    cashPayments: number;
+    onlinePayments: number;
+    totalPayments: number;
+  }>;
+  records: CyclePaymentRecord[];
+}
+
 export interface ReportsSnapshot {
   rangeKey: string;
   summary: {
@@ -491,6 +593,8 @@ export interface ReportsSnapshot {
     payLaterAmount: number;
     complimentaryValue: number;
     totalPayments: number;
+    cashPayments: number;
+    onlinePayments: number;
     outstandingRequiredAmount: number;
   };
   expectedVsCollected: Array<{
@@ -542,6 +646,9 @@ export interface ReportsSnapshot {
   reportOnlinePayments: Array<RetroactiveOnlinePayment & { cycleLabel: string }>;
   reportPayLaterBalances: PayLaterBalance[];
   reportPaymentReceipts: PaymentReceipt[];
+  reportPaymentRecords: CyclePaymentRecord[];
+  reportCashFloats: ReportCashFloatDetail["cycles"];
+  cashFloatSummary: ReportCashFloatDetail["summary"];
 }
 
 export interface ReportCycleDetail {
