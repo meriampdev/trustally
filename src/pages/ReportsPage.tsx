@@ -19,15 +19,16 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { MetricCard } from "../components/MetricCard";
 import { SectionCard } from "../components/SectionCard";
-import { fetchReportsSnapshot } from "../lib/api";
+import { fetchReportsSnapshot, fetchReportSetAside } from "../lib/api";
 import { formatCurrency, formatManilaDateTime, formatPercent } from "../lib/format";
-import { ReportsSnapshot } from "../lib/types";
+import { ReportsSnapshot, ReportSetAside } from "../lib/types";
 
 const rangeOptions = ["7d", "30d", "month", "3m", "6m", "1y"];
 
 export default function ReportsPage() {
   const [rangeKey, setRangeKey] = useState("30d");
   const [snapshot, setSnapshot] = useState<ReportsSnapshot | null>(null);
+  const [setAside, setSetAside] = useState<ReportSetAside | null>(null);
   const [detailView, setDetailView] = useState<string | null>(null);
   const expectedVsCollected = Array.isArray(snapshot?.expectedVsCollected)
     ? snapshot.expectedVsCollected
@@ -46,7 +47,13 @@ export default function ReportsPage() {
 
     
   useEffect(() => {
-    void fetchReportsSnapshot(rangeKey).then(setSnapshot);
+    setSnapshot(null);
+    setSetAside(null);
+    void Promise.all([fetchReportsSnapshot(rangeKey), fetchReportSetAside(rangeKey)])
+      .then(([nextSnapshot, nextSetAside]) => {
+        setSnapshot(nextSnapshot);
+        setSetAside(nextSetAside);
+      });
   }, [rangeKey]);
 
   const maxRevenue = useMemo(
@@ -60,16 +67,17 @@ export default function ReportsPage() {
     [expectedVsCollected],
   );
 
-  if (!snapshot) {
+  if (!snapshot || !setAside) {
     return <Spinner color="brand.400" />;
   }
 
   const actualGrossSales = snapshot.summary.totalPayments;
-  const actualGrossProfit = actualGrossSales - snapshot.summary.cogs;
-  const actualGrossMargin = actualGrossSales > 0
-    ? (actualGrossProfit / actualGrossSales) * 100
-    : null;
-
+  const totalCapital = setAside.summary.puresafeCapital == null || setAside.summary.miscCapital == null
+    ? null
+    : setAside.summary.puresafeCapital + setAside.summary.miscCapital;
+  const grossProfit = totalCapital == null
+    ? null
+    : actualGrossSales - totalCapital;
   return (
     <Stack spacing={5}>
       <SectionCard eyebrow="Range" title="Choose a reporting window">
@@ -100,11 +108,35 @@ export default function ReportsPage() {
       <SectionCard eyebrow="Sales metrics" title="Financial performance">
         <SimpleGrid columns={{ base: 2, xl: 4 }} spacing={4}>
           <MetricCard label="Gross sales" value={formatCurrency(actualGrossSales)} hint="Actual recorded payments · View details" onClick={() => setDetailView("salesRevenue")} />
-          <MetricCard label="Capital used" value={formatCurrency(snapshot.summary.cogs)} hint="Cost of goods sold · View details" onClick={() => setDetailView("capitalUsed")} />
-          <MetricCard label="Gross profit" value={formatCurrency(actualGrossProfit)} hint="Recorded money less product cost · View calculation" onClick={() => setDetailView("grossProfit")} />
-          <MetricCard label="Gross margin" value={formatPercent(actualGrossMargin)} hint="Cash-basis margin · View calculation" onClick={() => setDetailView("grossMargin")} />
+          <MetricCard label="Puresafe Capital" value={setAside.summary.puresafeCapital == null ? "Unable to calculate" : formatCurrency(setAside.summary.puresafeCapital)} hint="Puresafe 1L replacement cost" />
+          <MetricCard label="Gross Profit" value={grossProfit == null ? "Unable to calculate" : formatCurrency(grossProfit)} hint="Actual recorded sales less all product capital" />
+          <MetricCard label="Electricity Share" value={formatCurrency(setAside.summary.electricityShare)} hint="Cycle duration × snapshotted hourly rate" />
+          <MetricCard label="Other Products Capital" value={setAside.summary.miscCapital == null ? "Unable to calculate" : formatCurrency(setAside.summary.miscCapital)} hint="Replacement cost for every depleted non-Puresafe product" />
+          <MetricCard label="Total Capital" value={totalCapital == null ? "Unable to calculate" : formatCurrency(totalCapital)} hint="Puresafe plus all other product capital" />
+          <MetricCard label="Total Set Aside" value={setAside.summary.totalSetAside == null ? "Unable to calculate" : formatCurrency(setAside.summary.totalSetAside)} hint="Puresafe capital, electricity, and other-product capital" />
+          <MetricCard label="To Stash" value={setAside.summary.remainingEarnings == null ? "Unable to calculate" : formatCurrency(setAside.summary.remainingEarnings)} hint="Net profit available after change float and all reserves" />
         </SimpleGrid>
-        <Text color="canvas.700" fontSize="sm" mt={3}>These are cash-basis sales metrics from recorded payments. Net profit is not shown because operating expenses are not tracked yet.</Text>
+        <Text color="canvas.700" fontSize="sm" mt={3}>Gross sales use actual recorded payments. Change float stays in the box and is excluded from Set Aside and earnings.</Text>
+      </SectionCard>
+
+      <SectionCard eyebrow="Set Aside" title="Automatic reserves by cycle">
+        <SimpleGrid columns={{ base: 2, xl: 4 }} spacing={4}>
+          <MetricCard label="Cash after change float" value={formatCurrency(setAside.summary.cashAvailableAfterChangeFloat)} />
+          <MetricCard label="Available online payments" value={formatCurrency(setAside.summary.availableOnlinePayments)} />
+          <MetricCard label="Total available" value={formatCurrency(setAside.summary.totalAvailable)} />
+          <MetricCard label="Other products capital" value={setAside.summary.miscCapital == null ? "Unable to calculate" : formatCurrency(setAside.summary.miscCapital)} />
+          <MetricCard label="Total set aside" value={setAside.summary.totalSetAside == null ? "Unable to calculate" : formatCurrency(setAside.summary.totalSetAside)} />
+          <MetricCard label="Shortfall" value={setAside.summary.shortfall == null ? "Unable to calculate" : formatCurrency(setAside.summary.shortfall)} />
+        </SimpleGrid>
+        <Stack spacing={3} mt={4}>
+          {setAside.cycles.map((cycle) => (
+            <Box as={Link} to={`/history/${cycle.cycleId}`} key={cycle.cycleId} display="block" borderRadius="24px" bg="canvas.50" p={4} _hover={{ textDecoration: "none", bg: "whiteAlpha.100" }}>
+              <Text fontWeight="900">Cycle #{cycle.cycleNumber}</Text>
+              <Text color="canvas.700" mt={1}>Available {formatCurrency(cycle.totalAvailable)} · Puresafe {cycle.missingPuresafeCost ? "Unable to calculate" : formatCurrency(cycle.puresafeCapital)} · Electricity {formatCurrency(cycle.electricityShare)}</Text>
+              <Text color="canvas.700" mt={1}>Total set aside {cycle.totalSetAside == null ? "Unable to calculate" : formatCurrency(cycle.totalSetAside)} · Remaining {cycle.remainingEarnings == null ? "Unable to calculate" : formatCurrency(cycle.remainingEarnings)} · Shortfall {cycle.shortfall == null ? "Unable to calculate" : formatCurrency(cycle.shortfall)}</Text>
+            </Box>
+          ))}
+        </Stack>
       </SectionCard>
 
       <SectionCard eyebrow="Cash box flow" title="Change float by cycle">

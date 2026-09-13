@@ -9,6 +9,7 @@ import {
   CheckBoxRefillInput,
   CycleCashFloatDetail,
   CycleDetail,
+  CycleSetAside,
   CycleHonestyDetail,
   CyclePaymentDetail,
   CycleStatus,
@@ -26,6 +27,7 @@ import {
   ReportDrilldown,
   ReportCashFloatDetail,
   ReportPaymentDetail,
+  ReportSetAside,
   ReportsSnapshot,
   Settings,
   SetupProductInput,
@@ -343,6 +345,18 @@ export async function fetchCycleCashFloatDetail(cycleId: string) {
   return rpc<CycleCashFloatDetail>("get_cycle_cash_float_detail", { p_cycle_id: cycleId });
 }
 
+export async function fetchCycleSetAside(cycleId: string) {
+  return rpc<CycleSetAside>("get_cycle_set_aside", { p_cycle_id: cycleId });
+}
+
+export async function fetchReportSetAside(rangeKey: string) {
+  return rpc<ReportSetAside>("get_report_set_aside", {
+    p_range_key: rangeKey,
+    p_start_date: null,
+    p_end_date: null,
+  });
+}
+
 export async function updateCycleChangeFloat(input: {
   cycleId: string;
   openingChangeFloat?: string;
@@ -523,6 +537,15 @@ export async function updateSettings(input: Settings) {
     p_honesty_excellent_min: input.honestyExcellentMin,
     p_honesty_good_min: input.honestyGoodMin,
     p_honesty_attention_min: input.honestyAttentionMin,
+  });
+}
+
+export async function updateSetAsideSettings(input: Settings) {
+  return rpc<Settings>("update_set_aside_settings", {
+    p_electricity_cost_per_hour: input.electricityCostPerHour,
+    p_misc_capital_type: input.miscCapitalType,
+    p_fixed_misc_capital: input.fixedMiscCapital,
+    p_misc_capital_percentage: input.miscCapitalPercentage,
   });
 }
 

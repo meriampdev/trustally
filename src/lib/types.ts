@@ -14,6 +14,7 @@ export type DerivedBottlePaymentStatus =
   | "unresolved";
 export type PayLaterStatus = "OPEN" | "PARTIALLY_PAID" | "PAID" | "WRITTEN_OFF";
 export type CashMovementType = "CASH_REMOVED" | "CASH_RETURNED" | "CASH_CORRECTION";
+export type MiscCapitalType = "disabled" | "fixed" | "percentage" | "automatic";
 export type DifferenceResolutionType =
   | "PAY_LATER"
   | "FREE_OWNER_STAFF"
@@ -525,6 +526,61 @@ export interface CycleCashFloatDetail {
   adjustments: ChangeFloatAdjustment[];
 }
 
+export interface CycleSetAside {
+  cycleId: string;
+  cycleNumber: number;
+  startedAt: string;
+  completedAt: string | null;
+  isEstimate: boolean;
+  cashCounted: number;
+  closingChangeFloat: number;
+  cashAvailableAfterChangeFloat: number;
+  availableOnlinePayments: number;
+  totalAvailable: number;
+  puresafeBottlesToReplace: number;
+  puresafeCostPerUnit: number | null;
+  puresafeCapital: number | null;
+  puresafeProductId: string | null;
+  missingPuresafeCost: boolean;
+  cycleHours: number;
+  electricityCostPerHour: number;
+  electricityShare: number;
+  miscCapitalType: MiscCapitalType;
+  fixedMiscCapital: number;
+  miscCapitalPercentage: number;
+  miscCapital: number | null;
+  miscellaneousBottlesToReplace?: number;
+  missingMiscellaneousCost?: boolean;
+  miscellaneousProductBreakdown?: Array<{
+    productId: string;
+    productName: string;
+    unitsToReplace: number;
+    unitCost: number | null;
+    capital: number | null;
+  }>;
+  totalSetAside: number | null;
+  remainingEarnings: number | null;
+  shortfall: number | null;
+  settingsSnapshottedAt: string | null;
+}
+
+export interface ReportSetAside {
+  summary: {
+    cashAvailableAfterChangeFloat: number;
+    availableOnlinePayments: number;
+    totalAvailable: number;
+    puresafeCapital: number | null;
+    electricityShare: number;
+    miscCapital: number | null;
+    totalSetAside: number | null;
+    remainingEarnings: number | null;
+    shortfall: number | null;
+    missingPuresafeCostCycles: number;
+    missingMiscellaneousCostCycles?: number;
+  };
+  cycles: CycleSetAside[];
+}
+
 export interface ReportCashFloatDetail {
   summary: {
     cashCounted: number;
@@ -726,6 +782,10 @@ export interface Settings {
   honestyExcellentMin: number;
   honestyGoodMin: number;
   honestyAttentionMin: number;
+  electricityCostPerHour: number;
+  miscCapitalType: MiscCapitalType;
+  fixedMiscCapital: number;
+  miscCapitalPercentage: number;
 }
 
 export interface ProductUpsertInput {

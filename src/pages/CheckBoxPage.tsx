@@ -22,6 +22,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MetricCard } from "../components/MetricCard";
 import { SectionCard } from "../components/SectionCard";
+import { SetAsideSummary } from "../components/SetAsideSummary";
 import { clearCheckBoxDraft, loadCheckBoxDraft, saveCheckBoxDraft } from "../lib/checkBoxDraft";
 import {
   completeBoxCheck,
@@ -29,6 +30,8 @@ import {
   fetchCheckBoxDraft,
   fetchOutstandingBalances,
   fetchProducts,
+  fetchCyclePaymentDetail,
+  fetchSettings,
   previewBoxCheck,
   recordCycleDifference,
   updateCycleChangeFloat,
@@ -44,11 +47,14 @@ import {
   CheckBoxDraft,
   CheckBoxDraftPayload,
     CheckBoxPreview,
+    CyclePaymentDetail,
+    CycleSetAside,
     DifferenceResolutionInput,
     DifferenceResolutionType,
     NonSaleReason,
     PayLaterBalance,
     Product,
+    Settings,
   } from "../lib/types";
 
 const steps = ["Money", "Count", "Results", "Refill", "Done"];
@@ -107,6 +113,8 @@ export default function CheckBoxPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [cashMovements, setCashMovements] = useState<CashMovement[]>([]);
   const [payLaterBalances, setPayLaterBalances] = useState<PayLaterBalance[]>([]);
+  const [activeCyclePayments, setActiveCyclePayments] = useState<CyclePaymentDetail | null>(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [draft, setDraft] = useState<CheckBoxDraft | null>(null);
   const [preview, setPreview] = useState<CheckBoxPreview | null>(null);
   const [step, setStep] = useState(0);
@@ -131,16 +139,19 @@ export default function CheckBoxPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const [nextDraft, nextProducts, nextCashMovements, nextPayLaterBalances] = await Promise.all([
+      const [nextDraft, nextProducts, nextCashMovements, nextPayLaterBalances, nextSettings] = await Promise.all([
         fetchCheckBoxDraft(),
         fetchProducts(),
         fetchCashMovements(),
         fetchOutstandingBalances(),
+        fetchSettings(),
       ]);
       setServerDraft(nextDraft);
       setProducts(nextProducts);
       setCashMovements(nextCashMovements);
       setPayLaterBalances(nextPayLaterBalances);
+      setSettings(nextSettings);
+      setActiveCyclePayments(nextDraft ? await fetchCyclePaymentDetail(nextDraft.cycleId) : null);
 
       if (nextDraft) {
         const latestLegacyClosing = nextCashMovements
@@ -287,6 +298,93 @@ export default function CheckBoxPage() {
     recordedOutstandingAmount,
     recordedPayLaterAmount,
   ]);
+
+  const liveSetAside = useMemo<CycleSetAside | null>(() => {
+    if (!resolvedPreview || !serverDraft || !settings) return null;
+    const isPuresafe1L = (product: Product) => {
+      const identity = `${product.brand ?? ""} ${product.name} ${product.displayName}`.toLowerCase();
+      const volume = (product.volume ?? "").toLowerCase().replace(/\s/g, "");
+      return identity.includes("puresafe") && (volume === "1l" || volume === "1000ml" || /(^|\D)1\s*l(\D|$)/i.test(product.displayName));
+    };
+    const puresafeProducts = products.filter(isPuresafe1L);
+    const otherProducts = products.filter((product) => !isPuresafe1L(product));
+    const replacementReasons = new Set<NonSaleReason>(["DAMAGED", "FREE", "OWNER_USE", "STAFF_USE", "EVENT_USE"]);
+    const replacementUnitsFor = (product: Product) => {
+      const taken = resolvedPreview.productBreakdown.find((item) => item.productId === product.id)?.unitsTaken ?? 0;
+      const replaceableNonSales = draft?.nonSaleRemovals
+        .filter((item) => item.productId === product.id && replacementReasons.has(item.reason))
+        .reduce((total, item) => total + parseNumberInput(item.quantity), 0) ?? 0;
+      return taken + replaceableNonSales;
+    };
+    const puresafeUnits = puresafeProducts.reduce((sum, product) => sum + replacementUnitsFor(product), 0);
+    const missingPuresafeCost = puresafeProducts.some((product) => replacementUnitsFor(product) > 0 && product.defaultUnitCost <= 0);
+    const puresafeCapital = missingPuresafeCost
+      ? null
+      : puresafeProducts.reduce((sum, product) => sum + replacementUnitsFor(product) * product.defaultUnitCost, 0);
+    const miscellaneousProductBreakdown = otherProducts
+      .map((product) => {
+        const unitsToReplace = replacementUnitsFor(product);
+        const hasCost = product.defaultUnitCost > 0 || unitsToReplace === 0;
+        return {
+          productId: product.id,
+          productName: product.displayName,
+          unitsToReplace,
+          unitCost: product.defaultUnitCost > 0 ? product.defaultUnitCost : null,
+          capital: hasCost ? unitsToReplace * product.defaultUnitCost : null,
+        };
+      })
+      .filter((product) => product.unitsToReplace > 0);
+    const miscellaneousUnits = miscellaneousProductBreakdown.reduce((sum, product) => sum + product.unitsToReplace, 0);
+    const missingMiscellaneousCost = miscellaneousProductBreakdown.some((product) => product.capital == null);
+    const cashAvailableAfterChangeFloat = Math.max(cashCountedBeforeWithdrawal - closingChangeFloat, 0);
+    const previouslyRecordedOnline = activeCyclePayments?.records
+      .filter((record) => record.channel === "online" && record.source !== "cycle_check_total")
+      .reduce((sum, record) => sum + record.amount, 0) ?? 0;
+    const availableOnlinePayments = previouslyRecordedOnline
+      + parseNumberInput(draft?.gcashCollected ?? "0")
+      + parseNumberInput(draft?.mayaCollected ?? "0");
+    const totalAvailable = cashAvailableAfterChangeFloat + availableOnlinePayments;
+    const cycleHours = Math.max((Date.now() - new Date(serverDraft.startedAt).getTime()) / 3_600_000, 0);
+    const electricityShare = cycleHours * settings.electricityCostPerHour;
+    const miscCapital = missingMiscellaneousCost
+      ? null
+      : miscellaneousProductBreakdown.reduce((sum, product) => sum + (product.capital ?? 0), 0);
+    const totalSetAside = puresafeCapital == null || miscCapital == null
+      ? null
+      : puresafeCapital + electricityShare + miscCapital;
+
+    return {
+      cycleId: serverDraft.cycleId,
+      cycleNumber: serverDraft.cycleNumber,
+      startedAt: serverDraft.startedAt,
+      completedAt: null,
+      isEstimate: true,
+      cashCounted: cashCountedBeforeWithdrawal,
+      closingChangeFloat,
+      cashAvailableAfterChangeFloat,
+      availableOnlinePayments,
+      totalAvailable,
+      puresafeBottlesToReplace: puresafeUnits,
+      puresafeCostPerUnit: puresafeProducts[0]?.defaultUnitCost ?? null,
+      puresafeCapital,
+      puresafeProductId: puresafeProducts[0]?.id ?? null,
+      missingPuresafeCost,
+      cycleHours,
+      electricityCostPerHour: settings.electricityCostPerHour,
+      electricityShare,
+      miscCapitalType: "automatic",
+      fixedMiscCapital: 0,
+      miscCapitalPercentage: 0,
+      miscCapital,
+      miscellaneousBottlesToReplace: miscellaneousUnits,
+      missingMiscellaneousCost,
+      miscellaneousProductBreakdown,
+      totalSetAside,
+      remainingEarnings: totalSetAside == null ? null : Math.max(totalAvailable - totalSetAside, 0),
+      shortfall: totalSetAside == null ? null : Math.max(totalSetAside - totalAvailable, 0),
+      settingsSnapshottedAt: null,
+    };
+  }, [activeCyclePayments, cashCountedBeforeWithdrawal, closingChangeFloat, draft, products, resolvedPreview, serverDraft, settings]);
 
   if (isLoading) {
     return <Spinner color="brand.400" />;
@@ -758,6 +856,12 @@ export default function CheckBoxPage() {
               <Text>Non-sales cash added {formatCurrency(resolvedPreview.totals.trackedNonSalesCashAdded)}</Text>
             </SimpleGrid>
           </SectionCard>
+
+          {liveSetAside ? (
+            <SectionCard eyebrow="Set Aside" title="Automatic reserve estimate">
+              <SetAsideSummary value={liveSetAside} />
+            </SectionCard>
+          ) : null}
 
           {shortfallAmount > 0 ? (
             <SectionCard eyebrow="Account for difference" title="Tell Trustally what explains the gap.">

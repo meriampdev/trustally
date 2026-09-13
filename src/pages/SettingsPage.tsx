@@ -10,13 +10,14 @@ import {
 } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { SectionCard } from "../components/SectionCard";
-import { fetchSettings, updateSettings } from "../lib/api";
+import { fetchSettings, updateSetAsideSettings, updateSettings } from "../lib/api";
 import { Settings } from "../lib/types";
 
 export default function SettingsPage() {
   const toast = useToast();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingSetAside, setIsSavingSetAside] = useState(false);
 
   useEffect(() => {
     void fetchSettings().then(setSettings);
@@ -54,6 +55,34 @@ export default function SettingsPage() {
       });
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleSetAsideSave() {
+    if (!settings) return;
+    setIsSavingSetAside(true);
+    try {
+      const nextSettings = await updateSetAsideSettings(settings);
+      setSettings(nextSettings);
+      toast({
+        title: "Set Aside settings saved",
+        description: "New and active cycles will use these settings. Completed-cycle snapshots stay unchanged.",
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+        position: "top",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not save Set Aside settings",
+        description: error instanceof Error ? error.message : "Please try again.",
+        status: "error",
+        duration: 4200,
+        isClosable: true,
+        position: "top",
+      });
+    } finally {
+      setIsSavingSetAside(false);
     }
   }
 
@@ -141,6 +170,30 @@ export default function SettingsPage() {
         </Checkbox>
         <Button mt={5} onClick={() => void handleSave()} isLoading={isSaving}>
           Save settings
+        </Button>
+      </SectionCard>
+
+      <SectionCard eyebrow="Set Aside Settings" title="Automatic cycle reserves">
+        <Text color="canvas.700" mb={4}>
+          Electricity is calculated from each cycle’s duration. Product capital is calculated automatically from depleted quantities and the unit costs already saved on each product.
+        </Text>
+        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+          <Field label="Electricity cost per hour">
+            <Input
+              value={String(settings.electricityCostPerHour)}
+              onChange={(event) => setSettings((current) => current ? {
+                ...current,
+                electricityCostPerHour: Number(event.target.value) || 0,
+              } : current)}
+              inputMode="decimal"
+              type="number"
+              min={0}
+              step="0.01"
+            />
+          </Field>
+        </SimpleGrid>
+        <Button mt={5} onClick={() => void handleSetAsideSave()} isLoading={isSavingSetAside}>
+          Save Set Aside settings
         </Button>
       </SectionCard>
     </Stack>

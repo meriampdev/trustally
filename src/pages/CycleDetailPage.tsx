@@ -22,14 +22,15 @@ import { MetricCard } from "../components/MetricCard";
 import { PaymentDetailsModal } from "../components/PaymentDetailsModal";
 import { CycleHonestyPanel } from "../components/CycleHonestyPanel";
 import { SectionCard } from "../components/SectionCard";
-import { fetchCycleCashFloatDetail, fetchCycleDetail, fetchCycleDisclosureAndCollection, fetchCyclePaymentDetail, updateCycleChangeFloat } from "../lib/api";
+import { SetAsideSummary } from "../components/SetAsideSummary";
+import { fetchCycleCashFloatDetail, fetchCycleDetail, fetchCycleDisclosureAndCollection, fetchCyclePaymentDetail, fetchCycleSetAside, updateCycleChangeFloat } from "../lib/api";
 import {
   formatCurrency,
   formatDateRange,
   formatDateTimeLabel,
   formatPercent,
 } from "../lib/format";
-import { CycleCashFloatDetail, CycleDetail, CycleHonestyDetail, CyclePaymentDetail, CyclePaymentRecord } from "../lib/types";
+import { CycleCashFloatDetail, CycleDetail, CycleHonestyDetail, CyclePaymentDetail, CyclePaymentRecord, CycleSetAside } from "../lib/types";
 
 export default function CycleDetailPage() {
   const { cycleId = "" } = useParams();
@@ -39,6 +40,7 @@ export default function CycleDetailPage() {
   const [honesty, setHonesty] = useState<CycleHonestyDetail | null>(null);
   const [payments, setPayments] = useState<CyclePaymentDetail | null>(null);
   const [cashFloat, setCashFloat] = useState<CycleCashFloatDetail | null>(null);
+  const [setAside, setSetAside] = useState<CycleSetAside | null>(null);
   const [floatAdjustmentField, setFloatAdjustmentField] = useState<"opening" | "closing" | null>(null);
   const [floatAdjustmentAmount, setFloatAdjustmentAmount] = useState("");
   const [floatAdjustmentReason, setFloatAdjustmentReason] = useState("");
@@ -51,15 +53,17 @@ export default function CycleDetailPage() {
       fetchCycleDisclosureAndCollection(cycleId),
       fetchCyclePaymentDetail(cycleId),
       fetchCycleCashFloatDetail(cycleId),
-    ]).then(([nextDetail, nextHonesty, nextPayments, nextCashFloat]) => {
+      fetchCycleSetAside(cycleId),
+    ]).then(([nextDetail, nextHonesty, nextPayments, nextCashFloat, nextSetAside]) => {
       setDetail(nextDetail);
       setHonesty(nextHonesty);
       setPayments(nextPayments);
       setCashFloat(nextCashFloat);
+      setSetAside(nextSetAside);
     });
   }, [cycleId]);
 
-  if (!detail || !honesty || !payments || !cashFloat) {
+  if (!detail || !honesty || !payments || !cashFloat || !setAside) {
     return <Spinner color="brand.400" />;
   }
 
@@ -67,11 +71,12 @@ export default function CycleDetailPage() {
   const collectionRate = honesty.summary.currentlyDueAmount > 0
     ? Math.min((payments.summary.totalPayments / honesty.summary.currentlyDueAmount) * 100, 100)
     : null;
-  const actualGrossProfit = payments.summary.totalPayments - detail.totals.cogs;
-  const actualGrossMargin = payments.summary.totalPayments > 0
-    ? (actualGrossProfit / payments.summary.totalPayments) * 100
-    : null;
-
+  const totalCapital = setAside.puresafeCapital == null || setAside.miscCapital == null
+    ? null
+    : setAside.puresafeCapital + setAside.miscCapital;
+  const grossProfit = totalCapital == null
+    ? null
+    : payments.summary.totalPayments - totalCapital;
   function openPaymentDetails(channel: CyclePaymentRecord["channel"]) {
     setSearchParams({ payments: channel });
   }
@@ -161,11 +166,19 @@ export default function CycleDetailPage() {
       <SectionCard eyebrow="Sales and profit" title="Actual recorded money">
         <SimpleGrid columns={{ base: 2, xl: 4 }} spacing={4}>
           <MetricCard label="Gross sales" value={formatCurrency(payments.summary.totalPayments)} />
-          <MetricCard label="Capital used" value={formatCurrency(detail.totals.cogs)} />
-          <MetricCard label="Gross profit" value={formatCurrency(actualGrossProfit)} />
-          <MetricCard label="Gross margin" value={formatPercent(actualGrossMargin)} />
+          <MetricCard label="Puresafe Capital" value={setAside.missingPuresafeCost ? "Unable to calculate" : formatCurrency(setAside.puresafeCapital)} />
+          <MetricCard label="Gross Profit" value={grossProfit == null ? "Unable to calculate" : formatCurrency(grossProfit)} hint="Gross sales less all product capital" />
+          <MetricCard label="Electricity Share" value={formatCurrency(setAside.electricityShare)} />
+          <MetricCard label="Other Products Capital" value={setAside.miscCapital == null ? "Unable to calculate" : formatCurrency(setAside.miscCapital)} hint="Replacement cost for every depleted non-Puresafe product" />
+          <MetricCard label="Total Capital" value={totalCapital == null ? "Unable to calculate" : formatCurrency(totalCapital)} />
+          <MetricCard label="Total Set Aside" value={setAside.totalSetAside == null ? "Unable to calculate" : formatCurrency(setAside.totalSetAside)} />
+          <MetricCard label="Remaining After Set Aside" value={setAside.remainingEarnings == null ? "Unable to calculate" : formatCurrency(setAside.remainingEarnings)} hint="Net profit available after change float and all reserves" />
         </SimpleGrid>
         <Text color="canvas.700" mt={3}>Started {formatDateTimeLabel(detail.startedAt)} · Completed {formatDateTimeLabel(detail.completedAt)}</Text>
+      </SectionCard>
+
+      <SectionCard eyebrow="Set Aside" title="Money reserved from this cycle">
+        <SetAsideSummary value={setAside} />
       </SectionCard>
 
       <SectionCard eyebrow="Products" title="Product breakdown">

@@ -1,5 +1,6 @@
-import { Box, Text } from "@chakra-ui/react";
-import { ReactNode } from "react";
+import { Box, HStack, Text, Tooltip } from "@chakra-ui/react";
+import { Info } from "lucide-react";
+import { KeyboardEvent, MouseEvent, ReactNode } from "react";
 
 interface MetricCardProps {
   label: string;
@@ -12,8 +13,16 @@ interface MetricCardProps {
 export function MetricCard({ label, value, hint, accent, onClick }: MetricCardProps) {
   return (
     <Box
-      as={onClick ? "button" : "div"}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
+      onKeyDown={onClick ? (event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      } : undefined}
       textAlign="left"
       width="100%"
       cursor={onClick ? "pointer" : "default"}
@@ -26,17 +35,43 @@ export function MetricCard({ label, value, hint, accent, onClick }: MetricCardPr
       transition="transform 160ms ease, border-color 160ms ease"
       _hover={onClick ? { transform: "translateY(-2px)", borderColor: "brand.400" } : undefined}
     >
-      <Text fontSize="xs" textTransform="uppercase" letterSpacing="0.14em" color="canvas.700">
-        {label}
-      </Text>
+      <HStack align="center" spacing={1.5}>
+        <Text fontSize="xs" textTransform="uppercase" letterSpacing="0.14em" color="canvas.700">
+          {label}
+        </Text>
+        {hint ? (
+          <Tooltip
+            label={hint}
+            hasArrow
+            placement="top"
+            openDelay={150}
+            bg="canvas.900"
+            color="canvas.50"
+            borderRadius="12px"
+            px={3}
+            py={2}
+            maxW="280px"
+          >
+            <Box
+              as="span"
+              display="inline-flex"
+              alignItems="center"
+              justifyContent="center"
+              color="canvas.700"
+              cursor="help"
+              tabIndex={0}
+              aria-label={`Information about ${label}`}
+              onClick={(event: MouseEvent<HTMLSpanElement>) => event.stopPropagation()}
+              onKeyDown={(event: KeyboardEvent<HTMLSpanElement>) => event.stopPropagation()}
+            >
+              <Info size={14} aria-hidden="true" />
+            </Box>
+          </Tooltip>
+        ) : null}
+      </HStack>
       <Text mt={2} fontSize="2xl" fontWeight="900" color="canvas.900">
         {value}
       </Text>
-      {hint ? (
-        <Text mt={1} color="canvas.700">
-          {hint}
-        </Text>
-      ) : null}
       {accent}
     </Box>
   );

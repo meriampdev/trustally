@@ -13,18 +13,20 @@ import { Link } from "react-router-dom";
 import { MetricCard } from "../components/MetricCard";
 import { PaymentDetailsModal } from "../components/PaymentDetailsModal";
 import { SectionCard } from "../components/SectionCard";
+import { SetAsideSummary } from "../components/SetAsideSummary";
 import { useCurrentLocation } from "../lib/location";
 import {
   fetchCashMovements,
   fetchCycleCashFloatDetail,
-  fetchCycleDetail,
   fetchCycleDisclosureAndCollection,
   fetchCyclePaymentDetail,
+  fetchCycleSetAside,
   fetchHistoryFeed,
   fetchHomeDashboard,
   fetchOutstandingBalances,
   fetchProducts,
   fetchReportsSnapshot,
+  fetchReportSetAside,
 } from "../lib/api";
 import {
   formatCount,
@@ -33,7 +35,7 @@ import {
   formatDurationFromNow,
   formatPercent,
 } from "../lib/format";
-import { CashMovement, CycleCashFloatDetail, CycleDetail, CycleHonestyDetail, CyclePaymentDetail, CyclePaymentRecord, HistoryItem, HomeDashboard, PayLaterBalance, Product, ReportsSnapshot } from "../lib/types";
+import { CashMovement, CycleCashFloatDetail, CycleHonestyDetail, CyclePaymentDetail, CyclePaymentRecord, CycleSetAside, HistoryItem, HomeDashboard, PayLaterBalance, Product, ReportSetAside, ReportsSnapshot } from "../lib/types";
 
 type MetricsRange = "latest" | "7d" | "30d" | "month" | "3m" | "6m" | "1y";
 
@@ -56,13 +58,14 @@ export default function HomePage() {
   const [outstandingBalances, setOutstandingBalances] = useState<PayLaterBalance[]>([]);
   const [cashMovements, setCashMovements] = useState<CashMovement[]>([]);
   const [recentHonesty, setRecentHonesty] = useState<CycleHonestyDetail | null>(null);
-  const [recentCycleDetail, setRecentCycleDetail] = useState<CycleDetail | null>(null);
   const [recentCyclePayments, setRecentCyclePayments] = useState<CyclePaymentDetail | null>(null);
   const [recentCashFloat, setRecentCashFloat] = useState<CycleCashFloatDetail | null>(null);
+  const [recentSetAside, setRecentSetAside] = useState<CycleSetAside | null>(null);
   const [currentCashFloat, setCurrentCashFloat] = useState<CycleCashFloatDetail | null>(null);
   const [paymentDetailView, setPaymentDetailView] = useState<CyclePaymentRecord["channel"] | "all" | null>(null);
   const [metricsRange, setMetricsRange] = useState<MetricsRange>("latest");
   const [rangeMetrics, setRangeMetrics] = useState<ReportsSnapshot | null>(null);
+  const [rangeSetAside, setRangeSetAside] = useState<ReportSetAside | null>(null);
   const [isMetricsLoading, setIsMetricsLoading] = useState(false);
   const [metricsError, setMetricsError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -76,6 +79,7 @@ export default function HomePage() {
     let cancelled = false;
     if (metricsRange === "latest") {
       setRangeMetrics(null);
+      setRangeSetAside(null);
       setMetricsError("");
       setIsMetricsLoading(false);
       return;
@@ -83,10 +87,14 @@ export default function HomePage() {
 
     setIsMetricsLoading(true);
     setRangeMetrics(null);
+    setRangeSetAside(null);
     setMetricsError("");
-    void fetchReportsSnapshot(metricsRange)
-      .then((result) => {
-        if (!cancelled) setRangeMetrics(result);
+    void Promise.all([fetchReportsSnapshot(metricsRange), fetchReportSetAside(metricsRange)])
+      .then(([result, setAsideResult]) => {
+        if (!cancelled) {
+          setRangeMetrics(result);
+          setRangeSetAside(setAsideResult);
+        }
       })
       .catch((error) => {
         if (!cancelled) setMetricsError(error instanceof Error ? error.message : "Could not load this period.");
@@ -126,18 +134,18 @@ export default function HomePage() {
       setOutstandingBalances(nextOutstandingBalances);
       setCashMovements(nextCashMovements);
       const recentCycleId = nextDashboard.recentResult?.cycleId;
-      const [nextHonesty, nextCycleDetail, nextCyclePayments, nextRecentCashFloat] = recentCycleId
+      const [nextHonesty, nextCyclePayments, nextRecentCashFloat, nextSetAside] = recentCycleId
         ? await Promise.all([
             fetchCycleDisclosureAndCollection(recentCycleId),
-            fetchCycleDetail(recentCycleId),
             fetchCyclePaymentDetail(recentCycleId),
             fetchCycleCashFloatDetail(recentCycleId),
+            fetchCycleSetAside(recentCycleId),
           ])
         : [null, null, null, null];
       setRecentHonesty(nextHonesty);
-      setRecentCycleDetail(nextCycleDetail);
       setRecentCyclePayments(nextCyclePayments);
       setRecentCashFloat(nextRecentCashFloat);
+      setRecentSetAside(nextSetAside);
       setCurrentCashFloat(nextDashboard.currentCycle?.id ? await fetchCycleCashFloatDetail(nextDashboard.currentCycle.id) : null);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Could not load your box.");
@@ -261,13 +269,27 @@ export default function HomePage() {
   const metricsUnattributed = isLatestMetrics ? recentHonesty?.summary.unattributedMissingBottles ?? 0 : rangeMetrics?.summary.unattributedMissingBottles ?? 0;
   const metricsUnclassified = isLatestMetrics ? recentHonesty?.summary.unclassifiedHistoricalRecords ?? 0 : rangeMetrics?.summary.unclassifiedHistoricalRecords ?? 0;
   const metricsGrossSales = metricsPaymentTotal;
-  const metricsCapitalUsed = isLatestMetrics
-    ? recentCycleDetail?.totals.cogs ?? 0
-    : rangeMetrics?.summary.cogs ?? 0;
-  const metricsGrossProfit = metricsGrossSales - metricsCapitalUsed;
-  const metricsGrossMargin = metricsGrossSales > 0
-    ? (metricsGrossProfit / metricsGrossSales) * 100
-    : null;
+  const metricsPuresafeCapital = isLatestMetrics
+    ? recentSetAside?.puresafeCapital ?? null
+    : rangeSetAside?.summary.puresafeCapital ?? null;
+  const metricsElectricityShare = isLatestMetrics
+    ? recentSetAside?.electricityShare ?? 0
+    : rangeSetAside?.summary.electricityShare ?? 0;
+  const metricsMiscCapital = isLatestMetrics
+    ? recentSetAside?.miscCapital ?? null
+    : rangeSetAside?.summary.miscCapital ?? null;
+  const metricsTotalCapital = metricsPuresafeCapital == null || metricsMiscCapital == null
+    ? null
+    : metricsPuresafeCapital + metricsMiscCapital;
+  const metricsGrossProfit = metricsTotalCapital == null
+    ? null
+    : metricsGrossSales - metricsTotalCapital;
+  const metricsTotalSetAside = isLatestMetrics
+    ? recentSetAside?.totalSetAside ?? null
+    : rangeSetAside?.summary.totalSetAside ?? null;
+  const metricsRemainingEarnings = isLatestMetrics
+    ? recentSetAside?.remainingEarnings ?? null
+    : rangeSetAside?.summary.remainingEarnings ?? null;
 
   return (
     <Stack spacing={5}>
@@ -417,25 +439,21 @@ export default function HomePage() {
                 hint="Actual recorded payments · Click to view"
                 onClick={() => setPaymentDetailView("all")}
               />
-              <MetricCard
-                label="Capital used"
-                value={formatCurrency(metricsCapitalUsed)}
-                hint="Cost of goods sold"
-              />
-              <MetricCard
-                label="Gross profit"
-                value={formatCurrency(metricsGrossProfit)}
-                hint="Recorded money less product cost"
-              />
-              <MetricCard
-                label="Gross margin"
-                value={formatPercent(metricsGrossMargin)}
-                hint="Gross profit as a share of sales"
-              />
+              <MetricCard label="Total Capital" value={metricsTotalCapital == null ? "Unable to calculate" : formatCurrency(metricsTotalCapital)} hint="Puresafe plus all other product capital" />
+              <MetricCard label="Gross Profit" value={metricsGrossProfit == null ? "Unable to calculate" : formatCurrency(metricsGrossProfit)} hint="Actual recorded sales less all product capital" />
             </SimpleGrid>
-            <Text color="canvas.700" fontSize="sm" mt={3}>
-              Cash-basis sales only. Expected bottle value stays in Expected vs actual collection. Net profit is not shown because operating expenses are not tracked yet.
-            </Text>
+            {isLatestMetrics && recentSetAside ? (
+              <Box mt={4}><SetAsideSummary value={recentSetAside} /></Box>
+            ) : !isLatestMetrics && rangeSetAside ? (
+              <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4} mt={4}>
+                <MetricCard label="Puresafe Capital" value={rangeSetAside.summary.puresafeCapital == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.puresafeCapital)} />
+                <MetricCard label="Electricity Share" value={formatCurrency(rangeSetAside.summary.electricityShare)} />
+                <MetricCard label="Other Products Capital" value={rangeSetAside.summary.miscCapital == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.miscCapital)} />
+                <MetricCard label="Total Set Aside" value={rangeSetAside.summary.totalSetAside == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.totalSetAside)} />
+                <MetricCard label="To Stash" value={rangeSetAside.summary.remainingEarnings == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.remainingEarnings)} />
+                <MetricCard label="Shortfall" value={rangeSetAside.summary.shortfall == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.shortfall)} />
+              </SimpleGrid>
+            ) : null}
           </Box>
           {metricsUnclassified > 0 ? <Text color="canvas.700" mt={3}>{metricsUnclassified} historical record{metricsUnclassified === 1 ? " is" : "s are"} still unclassified.</Text> : null}
           </Stack>

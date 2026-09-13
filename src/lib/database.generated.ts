@@ -9,6 +9,8 @@ import type {
   PersonHonestySummary,
   ReportPaymentDetail,
   ReportCashFloatDetail,
+  CycleSetAside,
+  ReportSetAside,
 } from "./types";
 
 export interface DisclosureCollectionDatabaseTypes {
@@ -83,6 +85,14 @@ export interface DisclosureCollectionDatabaseTypes {
     get_report_change_float_detail: {
       Args: { p_range_key?: string; p_start_date?: string | null; p_end_date?: string | null };
       Returns: ReportCashFloatDetail;
+    };
+    get_cycle_set_aside: {
+      Args: { p_cycle_id: string };
+      Returns: CycleSetAside;
+    };
+    get_report_set_aside: {
+      Args: { p_range_key?: string; p_start_date?: string | null; p_end_date?: string | null };
+      Returns: ReportSetAside;
     };
     update_cycle_change_float: {
       Args: {
