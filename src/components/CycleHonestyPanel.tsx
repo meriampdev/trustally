@@ -111,7 +111,8 @@ export function CycleHonestyPanel({ cycle, paymentDetail, onDetailsChange }: Cyc
   const [isSavingPayment, setIsSavingPayment] = useState(false);
   const [isFilteringPeople, setIsFilteringPeople] = useState(false);
   const [isKnownUnpaidOpen, setIsKnownUnpaidOpen] = useState(false);
-  const [classifyingEntry, setClassifyingEntry] = useState<RetroactiveUnpaidEntry | null>(null);
+  const [isBottleModalOpen, setIsBottleModalOpen] = useState(false);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [bottleForm, setBottleForm] = useState(() => createBottleForm(cycle));
   const [paymentForm, setPaymentForm] = useState(() => createPaymentForm());
   const bottleDetection = useCycleDetection(bottleForm.occurredAt);
@@ -120,7 +121,7 @@ export function CycleHonestyPanel({ cycle, paymentDetail, onDetailsChange }: Cyc
   useEffect(() => {
     setBottleForm(createBottleForm(cycle));
     void load();
-  }, [cycle.cycleId]);
+  }, [cycle.cycleId, cycle.totals.bottlesTaken, cycle.totals.expectedRevenue]);
 
   async function load() {
     setIsLoading(true);
@@ -141,7 +142,7 @@ export function CycleHonestyPanel({ cycle, paymentDetail, onDetailsChange }: Cyc
     }
   }
 
-  async function handleSaveBottle(closeModalAfterSave = false) {
+  async function handleSaveBottle() {
     if (!bottleDetection.cycle || bottleDetection.error) {
       setErrorMessage(bottleDetection.error || "Choose a date inside an inventory cycle.");
       return;
@@ -171,9 +172,9 @@ export function CycleHonestyPanel({ cycle, paymentDetail, onDetailsChange }: Cyc
       });
       const assignedCycle = bottleDetection.cycle.cycleNumber;
       const wasEditing = Boolean(bottleForm.id);
-      if (closeModalAfterSave) setClassifyingEntry(null);
       setBottleForm(createBottleForm(cycle));
       await load();
+      setIsBottleModalOpen(false);
       toast({
         title: wasEditing ? "Bottle record updated" : "Bottle taken recorded",
         description: `Assigned to Cycle #${assignedCycle}. Existing inventory and revenue were not counted again.`,
@@ -212,6 +213,7 @@ export function CycleHonestyPanel({ cycle, paymentDetail, onDetailsChange }: Cyc
       const wasEditing = Boolean(paymentForm.id);
       setPaymentForm(createPaymentForm());
       await load();
+      setIsPaymentModalOpen(false);
       toast({
         title: wasEditing ? "Online payment updated" : "Online payment recorded",
         description: `Assigned to Cycle #${assignedCycle} and kept separate from physical cash.`,
@@ -224,16 +226,29 @@ export function CycleHonestyPanel({ cycle, paymentDetail, onDetailsChange }: Cyc
     }
   }
 
-  function openClassification(entry: RetroactiveUnpaidEntry) {
-    setClassifyingEntry(entry);
-    setBottleForm(toBottleEditForm(entry));
+  function openBottleModal(entry?: RetroactiveUnpaidEntry) {
+    setBottleForm(entry ? toBottleEditForm(entry) : createBottleForm(cycle));
+    setErrorMessage("");
+    setIsBottleModalOpen(true);
+  }
+
+  function closeBottleModal() {
+    if (isSavingBottle) return;
+    setIsBottleModalOpen(false);
+    setBottleForm(createBottleForm(cycle));
     setErrorMessage("");
   }
 
-  function closeClassification() {
-    if (isSavingBottle) return;
-    setClassifyingEntry(null);
-    setBottleForm(createBottleForm(cycle));
+  function openPaymentModal(payment?: RetroactiveOnlinePayment) {
+    setPaymentForm(payment ? toPaymentEditForm(payment) : createPaymentForm());
+    setErrorMessage("");
+    setIsPaymentModalOpen(true);
+  }
+
+  function closePaymentModal() {
+    if (isSavingPayment) return;
+    setIsPaymentModalOpen(false);
+    setPaymentForm(createPaymentForm());
     setErrorMessage("");
   }
 
@@ -339,17 +354,7 @@ export function CycleHonestyPanel({ cycle, paymentDetail, onDetailsChange }: Cyc
 
       <SectionCard eyebrow="Bottle-taken record" title="Record disclosed or discovered bottles">
         <Text color="canvas.700">Trustally detects the cycle from the date in Asia/Manila time. The record documents an existing inventory result and does not deduct stock or add revenue again.</Text>
-        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mt={4}>
-          <Field label="Date and time taken"><Input type="datetime-local" value={bottleForm.occurredAt} onChange={(event) => setBottleForm((current) => ({ ...current, occurredAt: event.target.value }))} /></Field>
-          <DetectedCycleField detection={bottleDetection} />
-          <Field label="Person (optional — leave blank for Unknown person)"><Input value={bottleForm.personLabel} onChange={(event) => setBottleForm((current) => ({ ...current, personLabel: event.target.value }))} /></Field>
-          <Field label="Product"><Select value={bottleForm.productId} onChange={(event) => setBottleForm((current) => ({ ...current, productId: event.target.value }))}>{cycle.productBreakdown.map((product) => <option key={product.productId} value={product.productId}>{product.productName}</option>)}</Select></Field>
-          <Field label="Quantity taken"><Input inputMode="numeric" value={bottleForm.quantity} onChange={(event) => setBottleForm((current) => ({ ...current, quantity: event.target.value }))} placeholder="1" /></Field>
-          <Field label="Disclosure source"><Select placeholder="Choose how this was disclosed" value={bottleForm.disclosureSource} onChange={(event) => setBottleForm((current) => ({ ...current, disclosureSource: event.target.value as BottleFormState["disclosureSource"] }))}><option value="self_reported">Self-reported — the person disclosed it</option><option value="owner_recorded">Observed or recorded by owner / coach</option><option value="inventory_discrepancy">Discovered during inventory count</option></Select></Field>
-          <Field label="Payment expectation"><Select placeholder="Choose what payment means here" value={bottleForm.paymentExpectation} onChange={(event) => setBottleForm((current) => ({ ...current, paymentExpectation: event.target.value as BottleFormState["paymentExpectation"] }))}><option value="required">Required — due now</option><option value="pay_later">Pay later — expected, not currently due</option><option value="complimentary">Complimentary — payment waived</option><option value="unknown">Unknown — resolve later</option></Select></Field>
-          <Field label="Notes (optional)"><Textarea value={bottleForm.note} onChange={(event) => setBottleForm((current) => ({ ...current, note: event.target.value }))} /></Field>
-        </SimpleGrid>
-        <HStack mt={4} spacing={3}><Button onClick={() => void handleSaveBottle()} isLoading={isSavingBottle}>{bottleForm.id ? "Save classification" : "Record bottles"}</Button>{bottleForm.id ? <Button variant="outline" onClick={() => setBottleForm(createBottleForm(cycle))}>Cancel edit</Button> : null}</HStack>
+        <Button mt={4} onClick={() => openBottleModal()}>Record bottles</Button>
         <EntryListEmpty visible={!bottleRecords.length} label="No bottle-taken records for this cycle." />
         <Stack spacing={3} mt={5}>
           {bottleRecords.map((entry) => {
@@ -364,7 +369,7 @@ export function CycleHonestyPanel({ cycle, paymentDetail, onDetailsChange }: Cyc
                 {entry.isUnclassifiedHistorical ? <Text color="orange.300" mt={2}>Unclassified historical record — excluded from disclosure-rate calculations.</Text> : null}
                 <Text color="canvas.700" mt={1}>Value {formatCurrency(entry.confirmedAmount)} · Status: {formatStatus(entry.paymentStatus)}</Text>
                 {entry.note ? <Text mt={2}>{entry.note}</Text> : null}
-                <HStack mt={3} spacing={3}><Button size="sm" variant="outline" onClick={() => entry.isUnclassifiedHistorical ? openClassification(entry) : setBottleForm(toBottleEditForm(entry))}>{entry.isUnclassifiedHistorical ? "Classify" : "Edit"}</Button><Button size="sm" variant="ghost" colorScheme="red" onClick={() => void handleDeleteBottle(entry)}>Delete</Button></HStack>
+                <HStack mt={3} spacing={3}><Button size="sm" variant="outline" onClick={() => openBottleModal(entry)}>{entry.isUnclassifiedHistorical ? "Classify" : "Edit"}</Button><Button size="sm" variant="ghost" colorScheme="red" onClick={() => void handleDeleteBottle(entry)}>Delete</Button></HStack>
               </Box>
             );
           })}
@@ -373,16 +378,7 @@ export function CycleHonestyPanel({ cycle, paymentDetail, onDetailsChange }: Cyc
 
       <SectionCard eyebrow="Retroactive online payment" title="Record a payment by its actual date">
         <Text color="canvas.700">Known-person payments are allocated within that cycle to required records oldest-first, then pay-later records. Unknown payers stay out of individual compliance calculations.</Text>
-        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mt={4}>
-          <Field label="Actual payment date and time"><Input type="datetime-local" value={paymentForm.occurredAt} onChange={(event) => setPaymentForm((current) => ({ ...current, occurredAt: event.target.value }))} /></Field>
-          <DetectedCycleField detection={paymentDetection} />
-          <Field label="Amount"><Input inputMode="decimal" value={paymentForm.amount} onChange={(event) => setPaymentForm((current) => ({ ...current, amount: event.target.value }))} /></Field>
-          <Field label="Method"><Select value={paymentForm.method} onChange={(event) => setPaymentForm((current) => ({ ...current, method: event.target.value as PaymentFormState["method"] }))}><option value="GCASH">GCash</option><option value="MAYA">Maya</option><option value="BANK">Bank transfer</option><option value="OTHER">Other online</option></Select></Field>
-          <Field label="Person (optional)"><Input value={paymentForm.personLabel} onChange={(event) => setPaymentForm((current) => ({ ...current, personLabel: event.target.value }))} /></Field>
-          <Field label="Reference number (optional)"><Input value={paymentForm.referenceNumber} onChange={(event) => setPaymentForm((current) => ({ ...current, referenceNumber: event.target.value }))} /></Field>
-          <Field label="Notes (optional)"><Textarea value={paymentForm.note} onChange={(event) => setPaymentForm((current) => ({ ...current, note: event.target.value }))} /></Field>
-        </SimpleGrid>
-        <HStack mt={4} spacing={3}><Button onClick={() => void handleSavePayment()} isLoading={isSavingPayment}>{paymentForm.id ? "Save changes" : "Record online payment"}</Button>{paymentForm.id ? <Button variant="outline" onClick={() => setPaymentForm(createPaymentForm())}>Cancel edit</Button> : null}</HStack>
+        <Button mt={4} onClick={() => openPaymentModal()}>Record online payment</Button>
         <EntryListEmpty visible={!detail.onlinePayments.length} label="No retroactive online payments for this cycle." />
         <Stack spacing={3} mt={5}>
           {detail.onlinePayments.map((payment) => (
@@ -391,7 +387,7 @@ export function CycleHonestyPanel({ cycle, paymentDetail, onDetailsChange }: Cyc
               <Text color="canvas.700" mt={1}>Paid {formatManilaDateTime(payment.paidAt)} · Cycle #{payment.cycleNumber}</Text>
               <Text color="canvas.700" mt={1}>Recorded {formatManilaDateTime(payment.createdAt)}{payment.referenceNumber ? ` · Ref ${payment.referenceNumber}` : ""}</Text>
               {payment.note ? <Text mt={1}>{payment.note}</Text> : null}
-              <HStack mt={3} spacing={3}><Button size="sm" variant="outline" onClick={() => setPaymentForm(toPaymentEditForm(payment))}>Edit</Button><Button size="sm" variant="ghost" colorScheme="red" onClick={() => void handleDeletePayment(payment)}>Delete</Button></HStack>
+              <HStack mt={3} spacing={3}><Button size="sm" variant="outline" onClick={() => openPaymentModal(payment)}>Edit</Button><Button size="sm" variant="ghost" colorScheme="red" onClick={() => void handleDeletePayment(payment)}>Delete</Button></HStack>
             </Box>
           ))}
         </Stack>
@@ -421,44 +417,57 @@ export function CycleHonestyPanel({ cycle, paymentDetail, onDetailsChange }: Cyc
         </SimpleGrid>
       </SectionCard>
 
-      <Modal isOpen={Boolean(classifyingEntry)} onClose={closeClassification} isCentered size="xl" closeOnOverlayClick={!isSavingBottle}>
+      <Modal isOpen={isBottleModalOpen} onClose={closeBottleModal} isCentered size="xl" closeOnOverlayClick={!isSavingBottle} scrollBehavior="inside">
         <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
         <ModalContent bg="canvas.100" border="1px solid" borderColor="whiteAlpha.200" borderRadius="28px" mx={4}>
-          <ModalHeader>Classify bottle record</ModalHeader>
+          <ModalHeader>{bottleForm.id ? "Correct bottle record" : "Record bottles"}</ModalHeader>
           <ModalCloseButton isDisabled={isSavingBottle} />
           <ModalBody>
-            {classifyingEntry ? (
-              <Stack spacing={4}>
-                {errorMessage ? <Alert status="error" borderRadius="18px"><AlertIcon /><AlertDescription>{errorMessage}</AlertDescription></Alert> : null}
-                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                  <Field label="Date and time taken"><Input type="datetime-local" value={bottleForm.occurredAt} onChange={(event) => setBottleForm((current) => ({ ...current, occurredAt: event.target.value }))} /></Field>
-                  <DetectedCycleField detection={bottleDetection} />
-                  <Field label="Person"><Input value={bottleForm.personLabel} onChange={(event) => setBottleForm((current) => ({ ...current, personLabel: event.target.value }))} placeholder="Unknown person" /></Field>
-                  <Field label="Product"><Select value={bottleForm.productId} onChange={(event) => setBottleForm((current) => ({ ...current, productId: event.target.value }))}>{cycle.productBreakdown.map((product) => <option key={product.productId} value={product.productId}>{product.productName}</option>)}</Select></Field>
-                  <Field label="Quantity"><Input inputMode="numeric" value={bottleForm.quantity} onChange={(event) => setBottleForm((current) => ({ ...current, quantity: event.target.value }))} /></Field>
-                  <Field label="Disclosure source">
-                    <Select placeholder="Choose a disclosure source" value={bottleForm.disclosureSource} onChange={(event) => setBottleForm((current) => ({ ...current, disclosureSource: event.target.value as BottleFormState["disclosureSource"] }))}>
-                    <option value="self_reported">Self-reported — the person disclosed it</option>
-                    <option value="owner_recorded">Observed or recorded by owner / coach</option>
-                    <option value="inventory_discrepancy">Discovered during inventory count</option>
-                    </Select>
-                  </Field>
-                  <Field label="Payment expectation">
-                    <Select placeholder="Choose a payment expectation" value={bottleForm.paymentExpectation} onChange={(event) => setBottleForm((current) => ({ ...current, paymentExpectation: event.target.value as BottleFormState["paymentExpectation"] }))}>
-                    <option value="required">Required — due now</option>
-                    <option value="pay_later">Pay later — expected, not currently due</option>
-                    <option value="complimentary">Complimentary — payment waived</option>
-                    <option value="unknown">Unknown — resolve later</option>
-                    </Select>
-                  </Field>
-                  <Field label="Notes"><Textarea value={bottleForm.note} onChange={(event) => setBottleForm((current) => ({ ...current, note: event.target.value }))} /></Field>
-                </SimpleGrid>
-              </Stack>
-            ) : null}
+            <Stack spacing={4}>
+              {errorMessage ? <Alert status="error" borderRadius="18px"><AlertIcon /><AlertDescription>{errorMessage}</AlertDescription></Alert> : null}
+              <Text color="canvas.700">The date assigns this record to its matching cycle. This documents the existing inventory result without deducting stock again.</Text>
+              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                <Field label="Date and time taken"><Input type="datetime-local" value={bottleForm.occurredAt} onChange={(event) => setBottleForm((current) => ({ ...current, occurredAt: event.target.value }))} /></Field>
+                <DetectedCycleField detection={bottleDetection} />
+                <Field label="Person"><Input value={bottleForm.personLabel} onChange={(event) => setBottleForm((current) => ({ ...current, personLabel: event.target.value }))} placeholder="Unknown person" /></Field>
+                <Field label="Product"><Select value={bottleForm.productId} onChange={(event) => setBottleForm((current) => ({ ...current, productId: event.target.value }))}>{cycle.productBreakdown.map((product) => <option key={product.productId} value={product.productId}>{product.productName}</option>)}</Select></Field>
+                <Field label="Quantity"><Input inputMode="numeric" value={bottleForm.quantity} onChange={(event) => setBottleForm((current) => ({ ...current, quantity: event.target.value }))} /></Field>
+                <Field label="Disclosure source"><Select placeholder="Choose a disclosure source" value={bottleForm.disclosureSource} onChange={(event) => setBottleForm((current) => ({ ...current, disclosureSource: event.target.value as BottleFormState["disclosureSource"] }))}><option value="self_reported">Self-reported — the person disclosed it</option><option value="owner_recorded">Observed or recorded by owner / coach</option><option value="inventory_discrepancy">Discovered during inventory count</option></Select></Field>
+                <Field label="Payment expectation"><Select placeholder="Choose a payment expectation" value={bottleForm.paymentExpectation} onChange={(event) => setBottleForm((current) => ({ ...current, paymentExpectation: event.target.value as BottleFormState["paymentExpectation"] }))}><option value="required">Required — due now</option><option value="pay_later">Pay later — expected, not currently due</option><option value="complimentary">Complimentary — payment waived</option><option value="unknown">Unknown — resolve later</option></Select></Field>
+                <Field label="Notes"><Textarea value={bottleForm.note} onChange={(event) => setBottleForm((current) => ({ ...current, note: event.target.value }))} /></Field>
+              </SimpleGrid>
+            </Stack>
           </ModalBody>
           <ModalFooter gap={3}>
-            <Button variant="ghost" onClick={closeClassification} isDisabled={isSavingBottle}>Cancel</Button>
-            <Button onClick={() => void handleSaveBottle(true)} isLoading={isSavingBottle}>Save classification</Button>
+            <Button variant="outline" onClick={closeBottleModal} isDisabled={isSavingBottle}>Cancel</Button>
+            <Button onClick={() => void handleSaveBottle()} isLoading={isSavingBottle}>{bottleForm.id ? "Save correction" : "Record bottles"}</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={isPaymentModalOpen} onClose={closePaymentModal} isCentered size="xl" closeOnOverlayClick={!isSavingPayment} scrollBehavior="inside">
+        <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
+        <ModalContent bg="canvas.100" border="1px solid" borderColor="whiteAlpha.200" borderRadius="28px" mx={4}>
+          <ModalHeader>{paymentForm.id ? "Correct online payment" : "Record online payment"}</ModalHeader>
+          <ModalCloseButton isDisabled={isSavingPayment} />
+          <ModalBody>
+            <Stack spacing={4}>
+              {errorMessage ? <Alert status="error" borderRadius="18px"><AlertIcon /><AlertDescription>{errorMessage}</AlertDescription></Alert> : null}
+              <Text color="canvas.700">Use the actual payment date. Trustally assigns the payment to the cycle covering that date and keeps it separate from physical cash.</Text>
+              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                <Field label="Actual payment date and time"><Input type="datetime-local" value={paymentForm.occurredAt} onChange={(event) => setPaymentForm((current) => ({ ...current, occurredAt: event.target.value }))} /></Field>
+                <DetectedCycleField detection={paymentDetection} />
+                <Field label="Amount"><Input inputMode="decimal" value={paymentForm.amount} onChange={(event) => setPaymentForm((current) => ({ ...current, amount: event.target.value }))} /></Field>
+                <Field label="Method"><Select value={paymentForm.method} onChange={(event) => setPaymentForm((current) => ({ ...current, method: event.target.value as PaymentFormState["method"] }))}><option value="GCASH">GCash</option><option value="MAYA">Maya</option><option value="BANK">Bank transfer</option><option value="OTHER">Other online</option></Select></Field>
+                <Field label="Person (optional)"><Input value={paymentForm.personLabel} onChange={(event) => setPaymentForm((current) => ({ ...current, personLabel: event.target.value }))} /></Field>
+                <Field label="Reference number (optional)"><Input value={paymentForm.referenceNumber} onChange={(event) => setPaymentForm((current) => ({ ...current, referenceNumber: event.target.value }))} /></Field>
+                <Field label="Notes (optional)"><Textarea value={paymentForm.note} onChange={(event) => setPaymentForm((current) => ({ ...current, note: event.target.value }))} /></Field>
+              </SimpleGrid>
+            </Stack>
+          </ModalBody>
+          <ModalFooter gap={3}>
+            <Button variant="outline" onClick={closePaymentModal} isDisabled={isSavingPayment}>Cancel</Button>
+            <Button onClick={() => void handleSavePayment()} isLoading={isSavingPayment}>{paymentForm.id ? "Save correction" : "Record payment"}</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

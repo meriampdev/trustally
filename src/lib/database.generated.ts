@@ -103,5 +103,17 @@ export interface DisclosureCollectionDatabaseTypes {
       };
       Returns: CycleCashFloatDetail;
     };
+    correct_completed_box_cycle: {
+      Args: {
+        p_cycle_id: string;
+        p_cash_counted_before_withdrawal: string;
+        p_closing_change_float: string;
+        p_gcash_collected: string;
+        p_maya_collected: string;
+        p_counts: Array<{ productId: string; endingQuantity: string }>;
+        p_reason: string;
+      };
+      Returns: { cycleId: string; corrected: boolean };
+    };
   };
 }

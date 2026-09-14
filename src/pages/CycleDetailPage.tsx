@@ -1,6 +1,7 @@
 import {
   Box,
   Button,
+  Divider,
   Input,
   Modal,
   ModalBody,
@@ -23,7 +24,7 @@ import { PaymentDetailsModal } from "../components/PaymentDetailsModal";
 import { CycleHonestyPanel } from "../components/CycleHonestyPanel";
 import { SectionCard } from "../components/SectionCard";
 import { SetAsideSummary } from "../components/SetAsideSummary";
-import { fetchCycleCashFloatDetail, fetchCycleDetail, fetchCycleDisclosureAndCollection, fetchCyclePaymentDetail, fetchCycleSetAside, updateCycleChangeFloat } from "../lib/api";
+import { correctCompletedBoxCycle, fetchCycleCashFloatDetail, fetchCycleDetail, fetchCycleDisclosureAndCollection, fetchCyclePaymentDetail, fetchCycleSetAside, updateCycleChangeFloat } from "../lib/api";
 import {
   formatCurrency,
   formatDateRange,
@@ -45,23 +46,37 @@ export default function CycleDetailPage() {
   const [floatAdjustmentAmount, setFloatAdjustmentAmount] = useState("");
   const [floatAdjustmentReason, setFloatAdjustmentReason] = useState("");
   const [isSavingFloat, setIsSavingFloat] = useState(false);
+  const [isCorrectionOpen, setIsCorrectionOpen] = useState(false);
+  const [isSavingCorrection, setIsSavingCorrection] = useState(false);
+  const [correctionError, setCorrectionError] = useState("");
+  const [correction, setCorrection] = useState({
+    cashCountedBeforeWithdrawal: "",
+    closingChangeFloat: "",
+    gcashCollected: "",
+    mayaCollected: "",
+    counts: {} as Record<string, string>,
+    reason: "",
+  });
   const paymentDetailView = searchParams.get("payments") as CyclePaymentRecord["channel"] | null;
 
   useEffect(() => {
-    void Promise.all([
+    void loadCycle();
+  }, [cycleId]);
+
+  async function loadCycle() {
+    const [nextDetail, nextHonesty, nextPayments, nextCashFloat, nextSetAside] = await Promise.all([
       fetchCycleDetail(cycleId),
       fetchCycleDisclosureAndCollection(cycleId),
       fetchCyclePaymentDetail(cycleId),
       fetchCycleCashFloatDetail(cycleId),
       fetchCycleSetAside(cycleId),
-    ]).then(([nextDetail, nextHonesty, nextPayments, nextCashFloat, nextSetAside]) => {
-      setDetail(nextDetail);
-      setHonesty(nextHonesty);
-      setPayments(nextPayments);
-      setCashFloat(nextCashFloat);
-      setSetAside(nextSetAside);
-    });
-  }, [cycleId]);
+    ]);
+    setDetail(nextDetail);
+    setHonesty(nextHonesty);
+    setPayments(nextPayments);
+    setCashFloat(nextCashFloat);
+    setSetAside(nextSetAside);
+  }
 
   if (!detail || !honesty || !payments || !cashFloat || !setAside) {
     return <Spinner color="brand.400" />;
@@ -113,9 +128,60 @@ export default function CycleDetailPage() {
     }
   }
 
+  function openCycleCorrection() {
+    if (!detail || !cashFloat) return;
+    setCorrection({
+      cashCountedBeforeWithdrawal: String(cashFloat.cashCountedBeforeWithdrawal ?? ""),
+      closingChangeFloat: String(cashFloat.closingChangeFloat),
+      gcashCollected: String(detail.totals.gcashCollected),
+      mayaCollected: String(detail.totals.mayaCollected),
+      counts: Object.fromEntries(detail.productBreakdown.map((item) => [item.productId, String(item.endingQuantity)])),
+      reason: "",
+    });
+    setCorrectionError("");
+    setIsCorrectionOpen(true);
+  }
+
+  async function saveCycleCorrection() {
+    if (!detail) return;
+    if (!correction.reason.trim()) {
+      setCorrectionError("Explain why these completed-cycle details are being corrected.");
+      return;
+    }
+    setIsSavingCorrection(true);
+    setCorrectionError("");
+    try {
+      await correctCompletedBoxCycle({
+        cycleId,
+        cashCountedBeforeWithdrawal: correction.cashCountedBeforeWithdrawal,
+        closingChangeFloat: correction.closingChangeFloat,
+        gcashCollected: correction.gcashCollected,
+        mayaCollected: correction.mayaCollected,
+        counts: detail.productBreakdown.map((item) => ({
+          productId: item.productId,
+          endingQuantity: correction.counts[item.productId] ?? String(item.endingQuantity),
+        })),
+        reason: correction.reason,
+      });
+      await loadCycle();
+      setIsCorrectionOpen(false);
+      toast({
+        title: "Completed cycle corrected",
+        description: "The audit reason was saved and later inventory balances were recalculated.",
+        status: "success",
+        position: "top",
+      });
+    } catch (error) {
+      setCorrectionError(error instanceof Error ? error.message : "Could not correct this cycle.");
+    } finally {
+      setIsSavingCorrection(false);
+    }
+  }
+
   return (
     <Stack spacing={5}>
       <SectionCard eyebrow={`Cycle #${detail.cycleNumber}`} title={formatDateRange(detail.startedAt, detail.completedAt)}>
+        {detail.status === "COMPLETED" ? <Button mb={4} variant="outline" onClick={openCycleCorrection}>Correct completed cycle</Button> : null}
         <SimpleGrid columns={{ base: 2, xl: 6 }} spacing={4}>
           <MetricCard label="Bottles taken" value={String(detail.totals.bottlesTaken)} />
           <MetricCard label="Expected sales" value={formatCurrency(detail.totals.expectedRevenue)} />
@@ -217,6 +283,7 @@ export default function CycleDetailPage() {
         onDetailsChange={(nextHonesty, nextPayments) => {
           setHonesty(nextHonesty);
           setPayments(nextPayments);
+          void fetchCycleSetAside(cycleId).then(setSetAside);
         }}
       />
 
@@ -244,6 +311,55 @@ export default function CycleDetailPage() {
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      <Modal isOpen={isCorrectionOpen} onClose={() => !isSavingCorrection && setIsCorrectionOpen(false)} isCentered size="xl" scrollBehavior="inside">
+        <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
+        <ModalContent bg="canvas.100" border="1px solid" borderColor="whiteAlpha.200" borderRadius="28px" mx={4}>
+          <ModalHeader>Correct completed Cycle #{detail.cycleNumber}</ModalHeader>
+          <ModalCloseButton isDisabled={isSavingCorrection} />
+          <ModalBody>
+            <Text color="canvas.700">
+              Correct the values captured at box check. Ending-count changes carry forward into later cycles; the save is rejected if a later completed count would become impossible.
+            </Text>
+            {correctionError ? <Text color="caution.600" mt={3}>{correctionError}</Text> : null}
+            <Text fontWeight="900" mt={5} mb={3}>Money counted at completion</Text>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+              <CorrectionField label="Total cash counted">
+                <Input inputMode="decimal" value={correction.cashCountedBeforeWithdrawal} onChange={(event) => setCorrection((current) => ({ ...current, cashCountedBeforeWithdrawal: event.target.value }))} />
+              </CorrectionField>
+              <CorrectionField label="Left for Change">
+                <Input inputMode="decimal" value={correction.closingChangeFloat} onChange={(event) => setCorrection((current) => ({ ...current, closingChangeFloat: event.target.value }))} />
+              </CorrectionField>
+              <CorrectionField label="GCash collected">
+                <Input inputMode="decimal" value={correction.gcashCollected} onChange={(event) => setCorrection((current) => ({ ...current, gcashCollected: event.target.value }))} />
+              </CorrectionField>
+              <CorrectionField label="Maya collected">
+                <Input inputMode="decimal" value={correction.mayaCollected} onChange={(event) => setCorrection((current) => ({ ...current, mayaCollected: event.target.value }))} />
+              </CorrectionField>
+            </SimpleGrid>
+            <Divider my={5} borderColor="whiteAlpha.300" />
+            <Text fontWeight="900" mb={3}>Products left in the box</Text>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+              {detail.productBreakdown.map((item) => (
+                <CorrectionField key={item.productId} label={item.productName}>
+                  <Input inputMode="numeric" value={correction.counts[item.productId] ?? ""} onChange={(event) => setCorrection((current) => ({ ...current, counts: { ...current.counts, [item.productId]: event.target.value } }))} />
+                </CorrectionField>
+              ))}
+            </SimpleGrid>
+            <CorrectionField label="Reason for correction">
+              <Textarea mt={2} value={correction.reason} onChange={(event) => setCorrection((current) => ({ ...current, reason: event.target.value }))} placeholder="Required for the audit history" />
+            </CorrectionField>
+          </ModalBody>
+          <ModalFooter gap={3}>
+            <Button variant="outline" onClick={() => setIsCorrectionOpen(false)} isDisabled={isSavingCorrection}>Cancel</Button>
+            <Button onClick={() => void saveCycleCorrection()} isLoading={isSavingCorrection}>Save correction</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Stack>
   );
+}
+
+function CorrectionField({ label, children }: { label: string; children: React.ReactNode }) {
+  return <Box><Text fontWeight="800" mb={2}>{label}</Text>{children}</Box>;
 }

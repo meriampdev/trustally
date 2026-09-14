@@ -4,7 +4,7 @@ import { formatCurrency } from "../lib/format";
 import { CycleSetAside } from "../lib/types";
 import { MetricCard } from "./MetricCard";
 
-export function SetAsideSummary({ value }: { value: CycleSetAside }) {
+export function SetAsideSummary({ value, onMetricClick }: { value: CycleSetAside; onMetricClick?: (metric: string) => void }) {
   const puresafeValue = value.missingPuresafeCost
     ? "Unable to calculate"
     : formatCurrency(value.puresafeCapital);
@@ -15,15 +15,15 @@ export function SetAsideSummary({ value }: { value: CycleSetAside }) {
   return (
     <Stack spacing={4}>
       <SimpleGrid columns={{ base: 2, md: 3 }} spacing={4}>
-        <MetricCard label="Cash after change float" value={formatCurrency(value.cashAvailableAfterChangeFloat)} />
-        <MetricCard label="Available online payments" value={formatCurrency(value.availableOnlinePayments)} />
-        <MetricCard label="Total available" value={formatCurrency(value.totalAvailable)} />
-        <MetricCard label="Puresafe Capital" value={puresafeValue} />
-        <MetricCard label="Electricity Share" value={formatCurrency(value.electricityShare)} hint={value.isEstimate ? "Estimated for the active cycle" : undefined} />
-        <MetricCard label="Other Products Capital" value={value.miscCapital == null ? "Unable to calculate" : formatCurrency(value.miscCapital)} />
-        <MetricCard label="Total set aside" value={totalValue} />
-        <MetricCard label="To Stash" value={earningsValue} hint="Net profit available after change float and all reserves" />
-        <MetricCard label="Shortfall" value={shortfallValue} />
+        <MetricCard label="Cash after change float" value={formatCurrency(value.cashAvailableAfterChangeFloat)} onClick={onMetricClick ? () => onMetricClick("cashAvailableAfterChangeFloat") : undefined} />
+        <MetricCard label="Available online payments" value={formatCurrency(value.availableOnlinePayments)} onClick={onMetricClick ? () => onMetricClick("availableOnlinePayments") : undefined} />
+        <MetricCard label="Total available" value={formatCurrency(value.totalAvailable)} onClick={onMetricClick ? () => onMetricClick("totalAvailable") : undefined} />
+        <MetricCard label="Puresafe Capital" value={puresafeValue} onClick={onMetricClick ? () => onMetricClick("puresafeCapital") : undefined} />
+        <MetricCard label="Electricity Share" value={formatCurrency(value.electricityShare)} hint={value.isEstimate ? "Estimated for the active cycle" : undefined} onClick={onMetricClick ? () => onMetricClick("electricityShare") : undefined} />
+        <MetricCard label="Other Products Capital" value={value.miscCapital == null ? "Unable to calculate" : formatCurrency(value.miscCapital)} onClick={onMetricClick ? () => onMetricClick("miscCapital") : undefined} />
+        <MetricCard label="Total set aside" value={totalValue} onClick={onMetricClick ? () => onMetricClick("totalSetAside") : undefined} />
+        <MetricCard label="To Stash" value={earningsValue} hint="Net profit available after change float and all reserves" onClick={onMetricClick ? () => onMetricClick("remainingEarnings") : undefined} />
+        <MetricCard label="Shortfall" value={shortfallValue} onClick={onMetricClick ? () => onMetricClick("shortfall") : undefined} />
       </SimpleGrid>
 
       <Box bg="canvas.50" borderRadius="20px" p={4}>

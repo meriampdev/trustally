@@ -108,29 +108,29 @@ export default function ReportsPage() {
       <SectionCard eyebrow="Sales metrics" title="Financial performance">
         <SimpleGrid columns={{ base: 2, xl: 4 }} spacing={4}>
           <MetricCard label="Gross sales" value={formatCurrency(actualGrossSales)} hint="Actual recorded payments · View details" onClick={() => setDetailView("salesRevenue")} />
-          <MetricCard label="Puresafe Capital" value={setAside.summary.puresafeCapital == null ? "Unable to calculate" : formatCurrency(setAside.summary.puresafeCapital)} hint="Puresafe 1L replacement cost" />
-          <MetricCard label="Gross Profit" value={grossProfit == null ? "Unable to calculate" : formatCurrency(grossProfit)} hint="Actual recorded sales less all product capital" />
-          <MetricCard label="Electricity Share" value={formatCurrency(setAside.summary.electricityShare)} hint="Cycle duration × snapshotted hourly rate" />
-          <MetricCard label="Other Products Capital" value={setAside.summary.miscCapital == null ? "Unable to calculate" : formatCurrency(setAside.summary.miscCapital)} hint="Replacement cost for every depleted non-Puresafe product" />
-          <MetricCard label="Total Capital" value={totalCapital == null ? "Unable to calculate" : formatCurrency(totalCapital)} hint="Puresafe plus all other product capital" />
-          <MetricCard label="Total Set Aside" value={setAside.summary.totalSetAside == null ? "Unable to calculate" : formatCurrency(setAside.summary.totalSetAside)} hint="Puresafe capital, electricity, and other-product capital" />
-          <MetricCard label="To Stash" value={setAside.summary.remainingEarnings == null ? "Unable to calculate" : formatCurrency(setAside.summary.remainingEarnings)} hint="Net profit available after change float and all reserves" />
+          <MetricCard label="Puresafe Capital" value={setAside.summary.puresafeCapital == null ? "Unable to calculate" : formatCurrency(setAside.summary.puresafeCapital)} hint="View replacement cost by cycle" onClick={() => setDetailView("puresafeCapital")} />
+          <MetricCard label="Gross Profit" value={grossProfit == null ? "Unable to calculate" : formatCurrency(grossProfit)} hint="View the full calculation" onClick={() => setDetailView("grossProfit")} />
+          <MetricCard label="Electricity Share" value={formatCurrency(setAside.summary.electricityShare)} hint="View duration and hourly rate by cycle" onClick={() => setDetailView("electricityShare")} />
+          <MetricCard label="Other Products Capital" value={setAside.summary.miscCapital == null ? "Unable to calculate" : formatCurrency(setAside.summary.miscCapital)} hint="View product replacement capital by cycle" onClick={() => setDetailView("miscCapital")} />
+          <MetricCard label="Total Capital" value={totalCapital == null ? "Unable to calculate" : formatCurrency(totalCapital)} hint="View capital components by cycle" onClick={() => setDetailView("totalCapital")} />
+          <MetricCard label="Total Set Aside" value={setAside.summary.totalSetAside == null ? "Unable to calculate" : formatCurrency(setAside.summary.totalSetAside)} hint="View reserves by cycle" onClick={() => setDetailView("totalSetAside")} />
+          <MetricCard label="To Stash" value={setAside.summary.remainingEarnings == null ? "Unable to calculate" : formatCurrency(setAside.summary.remainingEarnings)} hint="View remaining earnings by cycle" onClick={() => setDetailView("remainingEarnings")} />
         </SimpleGrid>
         <Text color="canvas.700" fontSize="sm" mt={3}>Gross sales use actual recorded payments. Change float stays in the box and is excluded from Set Aside and earnings.</Text>
       </SectionCard>
 
       <SectionCard eyebrow="Set Aside" title="Automatic reserves by cycle">
         <SimpleGrid columns={{ base: 2, xl: 4 }} spacing={4}>
-          <MetricCard label="Cash after change float" value={formatCurrency(setAside.summary.cashAvailableAfterChangeFloat)} />
-          <MetricCard label="Available online payments" value={formatCurrency(setAside.summary.availableOnlinePayments)} />
-          <MetricCard label="Total available" value={formatCurrency(setAside.summary.totalAvailable)} />
-          <MetricCard label="Other products capital" value={setAside.summary.miscCapital == null ? "Unable to calculate" : formatCurrency(setAside.summary.miscCapital)} />
-          <MetricCard label="Total set aside" value={setAside.summary.totalSetAside == null ? "Unable to calculate" : formatCurrency(setAside.summary.totalSetAside)} />
-          <MetricCard label="Shortfall" value={setAside.summary.shortfall == null ? "Unable to calculate" : formatCurrency(setAside.summary.shortfall)} />
+          <MetricCard label="Cash after change float" value={formatCurrency(setAside.summary.cashAvailableAfterChangeFloat)} hint="View by cycle" onClick={() => setDetailView("cashAvailableAfterChangeFloat")} />
+          <MetricCard label="Available online payments" value={formatCurrency(setAside.summary.availableOnlinePayments)} hint="View by cycle" onClick={() => setDetailView("availableOnlinePayments")} />
+          <MetricCard label="Total available" value={formatCurrency(setAside.summary.totalAvailable)} hint="View by cycle" onClick={() => setDetailView("totalAvailable")} />
+          <MetricCard label="Other products capital" value={setAside.summary.miscCapital == null ? "Unable to calculate" : formatCurrency(setAside.summary.miscCapital)} hint="View by cycle" onClick={() => setDetailView("miscCapital")} />
+          <MetricCard label="Total set aside" value={setAside.summary.totalSetAside == null ? "Unable to calculate" : formatCurrency(setAside.summary.totalSetAside)} hint="View by cycle" onClick={() => setDetailView("totalSetAside")} />
+          <MetricCard label="Shortfall" value={setAside.summary.shortfall == null ? "Unable to calculate" : formatCurrency(setAside.summary.shortfall)} hint="View by cycle" onClick={() => setDetailView("shortfall")} />
         </SimpleGrid>
         <Stack spacing={3} mt={4}>
           {setAside.cycles.map((cycle) => (
-            <Box as={Link} to={`/history/${cycle.cycleId}`} key={cycle.cycleId} display="block" borderRadius="24px" bg="canvas.50" p={4} _hover={{ textDecoration: "none", bg: "whiteAlpha.100" }}>
+            <Box key={cycle.cycleId} as="button" width="100%" textAlign="left" cursor="pointer" borderRadius="24px" bg="canvas.50" p={4} _hover={{ bg: "whiteAlpha.100" }} onClick={() => setDetailView(`cycle:${cycle.cycleId}`)}>
               <Text fontWeight="900">Cycle #{cycle.cycleNumber}</Text>
               <Text color="canvas.700" mt={1}>Available {formatCurrency(cycle.totalAvailable)} · Puresafe {cycle.missingPuresafeCost ? "Unable to calculate" : formatCurrency(cycle.puresafeCapital)} · Electricity {formatCurrency(cycle.electricityShare)}</Text>
               <Text color="canvas.700" mt={1}>Total set aside {cycle.totalSetAside == null ? "Unable to calculate" : formatCurrency(cycle.totalSetAside)} · Remaining {cycle.remainingEarnings == null ? "Unable to calculate" : formatCurrency(cycle.remainingEarnings)} · Shortfall {cycle.shortfall == null ? "Unable to calculate" : formatCurrency(cycle.shortfall)}</Text>
@@ -141,14 +141,14 @@ export default function ReportsPage() {
 
       <SectionCard eyebrow="Cash box flow" title="Change float by cycle">
         <SimpleGrid columns={{ base: 2, xl: 4 }} spacing={4}>
-          <MetricCard label="Cash counted" value={formatCurrency(snapshot.cashFloatSummary.cashCounted)} />
-          <MetricCard label="Customer cash generated" value={formatCurrency(snapshot.cashFloatSummary.cashGenerated)} />
-          <MetricCard label="Cash withdrawn" value={formatCurrency(snapshot.cashFloatSummary.cashWithdrawn)} />
-          <MetricCard label="Unknown opening floats" value={String(snapshot.cashFloatSummary.unknownOpeningFloatCycles)} hint="Excluded from generated-cash total" />
+          <MetricCard label="Cash counted" value={formatCurrency(snapshot.cashFloatSummary.cashCounted)} hint="View cash checks by cycle" onClick={() => setDetailView("cashCounted")} />
+          <MetricCard label="Customer cash generated" value={formatCurrency(snapshot.cashFloatSummary.cashGenerated)} hint="View generated cash by cycle" onClick={() => setDetailView("cashGenerated")} />
+          <MetricCard label="Cash withdrawn" value={formatCurrency(snapshot.cashFloatSummary.cashWithdrawn)} hint="View withdrawals by cycle" onClick={() => setDetailView("cashWithdrawn")} />
+          <MetricCard label="Unknown opening floats" value={String(snapshot.cashFloatSummary.unknownOpeningFloatCycles)} hint="View excluded cycles" onClick={() => setDetailView("unknownOpeningFloats")} />
         </SimpleGrid>
         <Stack spacing={3} mt={4}>
           {snapshot.reportCashFloats.length ? snapshot.reportCashFloats.map((cashFloat) => (
-            <Box as={Link} to={`/history/${cashFloat.cycleId}`} key={cashFloat.cycleId} display="block" borderRadius="24px" bg="canvas.50" p={4} _hover={{ textDecoration: "none", bg: "whiteAlpha.100" }}>
+            <Box key={cashFloat.cycleId} as="button" width="100%" textAlign="left" cursor="pointer" borderRadius="24px" bg="canvas.50" p={4} _hover={{ bg: "whiteAlpha.100" }} onClick={() => setDetailView(`cycle:${cashFloat.cycleId}`)}>
               <Text fontWeight="900">{cashFloat.cycleLabel}</Text>
               <Text color="canvas.700" mt={1}>
                 Opening {cashFloat.openingChangeFloat == null ? "Unknown" : formatCurrency(cashFloat.openingChangeFloat)} · Counted {formatCurrency(cashFloat.cashCountedBeforeWithdrawal)} · Left for Change {formatCurrency(cashFloat.closingChangeFloat)}
@@ -186,7 +186,7 @@ export default function ReportsPage() {
       <SectionCard eyebrow="Disclosure and collection trend" title="Cycle-by-cycle results">
         <Stack spacing={3}>
           {disclosureCollectionTrend.length ? disclosureCollectionTrend.map((item) => (
-            <Box as={Link} to={`/history/${item.cycleId}`} display="block" key={item.cycleId} borderRadius="24px" bg="canvas.50" p={4} _hover={{ textDecoration: "none", bg: "whiteAlpha.100" }}>
+            <Box as="button" width="100%" textAlign="left" cursor="pointer" key={item.cycleId} borderRadius="24px" bg="canvas.50" p={4} _hover={{ bg: "whiteAlpha.100" }} onClick={() => setDetailView(`cycle:${item.cycleId}`)}>
               <HStack justify="space-between" align="start" flexWrap="wrap">
                 <Text fontWeight="800">{item.label}</Text>
                 <Text color="canvas.700">Disclosure {formatPercent(item.disclosureRate)} · Collection {item.collectionRate == null ? "Payment not required" : formatPercent(item.collectionRate)}</Text>
@@ -201,7 +201,7 @@ export default function ReportsPage() {
         <Stack spacing={4}>
           {expectedVsCollected.length ? (
             expectedVsCollected.map((item, index) => (
-            <Box key={item.label} role="button" tabIndex={0} cursor="pointer" onClick={() => setDetailView(reportCyclesAscending[index] ? `cycle:${reportCyclesAscending[index].cycleId}` : "expectedRevenue")}>
+            <Box key={item.label} as="button" width="100%" textAlign="left" cursor="pointer" onClick={() => setDetailView(reportCyclesAscending[index] ? `cycle:${reportCyclesAscending[index].cycleId}` : "expectedRevenue")}>
               <HStack justify="space-between" mb={1}>
                 <Text fontWeight="800">{item.label}</Text>
                 <Text color="canvas.700">
@@ -231,7 +231,7 @@ export default function ReportsPage() {
         <Stack spacing={4}>
           {accountedTrend.length ? (
             accountedTrend.map((item, index) => (
-              <Box key={item.label} borderRadius="24px" bg="canvas.50" p={4} role="button" tabIndex={0} cursor="pointer" onClick={() => setDetailView(reportCyclesAscending[index] ? `cycle:${reportCyclesAscending[index].cycleId}` : "collection")}>
+              <Box key={item.label} as="button" width="100%" textAlign="left" borderRadius="24px" bg="canvas.50" p={4} cursor="pointer" onClick={() => setDetailView(reportCyclesAscending[index] ? `cycle:${reportCyclesAscending[index].cycleId}` : "collection")}>
                 <HStack justify="space-between" mb={2}>
                   <Text fontWeight="800">{item.label}</Text>
                   <Text color="canvas.700">
@@ -253,7 +253,7 @@ export default function ReportsPage() {
         <Stack spacing={3}>
           {productPerformance.length ? (
             productPerformance.map((item) => (
-              <Box key={item.productId} borderRadius="24px" bg="canvas.50" p={4} role="button" tabIndex={0} cursor="pointer" onClick={() => setDetailView(`product:${item.productId}`)}>
+              <Box key={item.productId} as="button" width="100%" textAlign="left" borderRadius="24px" bg="canvas.50" p={4} cursor="pointer" onClick={() => setDetailView(`product:${item.productId}`)}>
                 <Text fontWeight="800">{item.productName}</Text>
                 <Text color="canvas.700" mt={1}>
                   {item.unitsTaken} taken • {formatCurrency(item.expectedRevenue)} earned • {formatCurrency(item.grossProfit)} gross profit
@@ -275,7 +275,7 @@ export default function ReportsPage() {
           <ModalHeader>{getDetailTitle(detailView)}</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            {detailView ? <ReportDetailContent detailView={detailView} snapshot={snapshot} /> : null}
+            {detailView ? <ReportDetailContent detailView={detailView} snapshot={snapshot} setAside={setAside} /> : null}
           </ModalBody>
           <ModalFooter><Button onClick={() => setDetailView(null)}>Close</Button></ModalFooter>
         </ModalContent>
@@ -307,6 +307,20 @@ const detailTitles: Record<string, string> = {
   capitalUsed: "Capital used details",
   grossProfit: "Gross profit details",
   grossMargin: "Gross margin details",
+  puresafeCapital: "Puresafe capital by cycle",
+  electricityShare: "Electricity share by cycle",
+  miscCapital: "Other-products capital by cycle",
+  totalCapital: "Total capital by cycle",
+  totalSetAside: "Total set aside by cycle",
+  remainingEarnings: "To Stash by cycle",
+  cashAvailableAfterChangeFloat: "Cash after change float",
+  availableOnlinePayments: "Available online payments",
+  totalAvailable: "Total available by cycle",
+  shortfall: "Shortfall by cycle",
+  cashCounted: "Cash counted by cycle",
+  cashGenerated: "Customer cash generated by cycle",
+  cashWithdrawn: "Cash withdrawn by cycle",
+  unknownOpeningFloats: "Cycles with unknown opening float",
 };
 
 function getDetailTitle(detailView: string | null) {
@@ -316,7 +330,7 @@ function getDetailTitle(detailView: string | null) {
   return detailTitles[detailView] ?? "Report details";
 }
 
-function ReportDetailContent({ detailView, snapshot }: { detailView: string; snapshot: ReportsSnapshot }) {
+function ReportDetailContent({ detailView, snapshot, setAside }: { detailView: string; snapshot: ReportsSnapshot; setAside: ReportSetAside }) {
   const cycleId = detailView.startsWith("cycle:") ? detailView.slice(6) : null;
   const productId = detailView.startsWith("product:") ? detailView.slice(8) : null;
 
@@ -376,6 +390,8 @@ function ReportDetailContent({ detailView, snapshot }: { detailView: string; sna
   const records = filter ? snapshot.reportBottleRecords.filter(filter) : [];
   const cycleKeys = new Set(["immediateCollected", "totalPayments", "cashPayments", "onlinePayments", "bottlesTaken", "expectedRevenue", "disclosure", "unattributed", "collection", "paymentRequired", "payLater", "outstanding"]);
   const financialKeys = new Set(["salesRevenue", "capitalUsed", "grossProfit", "grossMargin"]);
+  const setAsideKeys = new Set(["puresafeCapital", "electricityShare", "miscCapital", "totalCapital", "totalSetAside", "remainingEarnings", "cashAvailableAfterChangeFloat", "availableOnlinePayments", "totalAvailable", "shortfall"]);
+  const cashFloatKeys = new Set(["cashCounted", "cashGenerated", "cashWithdrawn", "unknownOpeningFloats"]);
 
   return (
     <Stack spacing={4}>
@@ -383,7 +399,9 @@ function ReportDetailContent({ detailView, snapshot }: { detailView: string; sna
       {filter ? <RecordList records={records} empty="No matching individual bottle records in the selected range." /> : null}
       {detailView === "salesRevenue" ? <PaymentRecordList records={snapshot.reportPaymentRecords} /> : null}
       {detailView === "capitalUsed" ? <CapitalBreakdown products={snapshot.productPerformance} /> : null}
-      {detailView === "grossProfit" || detailView === "grossMargin" ? <FinancialCalculation snapshot={snapshot} /> : null}
+      {detailView === "grossProfit" || detailView === "grossMargin" ? <FinancialCalculation snapshot={snapshot} setAside={setAside} /> : null}
+      {setAsideKeys.has(detailView) ? <SetAsideBreakdown cycles={setAside.cycles} detailView={detailView} /> : null}
+      {cashFloatKeys.has(detailView) ? <CashFloatBreakdown cycles={snapshot.reportCashFloats} detailView={detailView} /> : null}
       {detailView === "totalPayments" || detailView === "cashPayments" || detailView === "onlinePayments" ? (
         <PaymentRecordList
           records={snapshot.reportPaymentRecords.filter((record) => detailView === "totalPayments" || record.channel === (detailView === "cashPayments" ? "cash" : "online"))}
@@ -406,7 +424,7 @@ function ReportDetailContent({ detailView, snapshot }: { detailView: string; sna
           {snapshot.reportOnlinePayments.map((payment) => <Box key={payment.id} bg="canvas.50" borderRadius="20px" p={4}><Text fontWeight="900">{formatCurrency(payment.amount)} · {payment.method}</Text><Text color="canvas.700" mt={1}>{payment.personLabel ?? payment.customerLabel ?? "Unknown payer"} · {formatManilaDateTime(payment.paidAt)}</Text></Box>)}
         </Stack>
       ) : null}
-      {!cycleKeys.has(detailView) && !financialKeys.has(detailView) && !filter && detailView !== "knownPayLater" ? <Text color="canvas.700">No additional details are available for this item.</Text> : null}
+      {!cycleKeys.has(detailView) && !financialKeys.has(detailView) && !setAsideKeys.has(detailView) && !cashFloatKeys.has(detailView) && !filter && detailView !== "knownPayLater" ? <Text color="canvas.700">No additional details are available for this item.</Text> : null}
     </Stack>
   );
 }
@@ -424,21 +442,71 @@ function CapitalBreakdown({ products }: { products: ReportsSnapshot["productPerf
   ) : <Text color="canvas.700">No product cost recorded in this reporting range.</Text>;
 }
 
-function FinancialCalculation({ snapshot }: { snapshot: ReportsSnapshot }) {
+function FinancialCalculation({ snapshot, setAside }: { snapshot: ReportsSnapshot; setAside: ReportSetAside }) {
   const grossSales = snapshot.summary.totalPayments;
-  const grossProfit = grossSales - snapshot.summary.cogs;
-  const grossMargin = grossSales > 0 ? (grossProfit / grossSales) * 100 : null;
+  const capital = setAside.summary.puresafeCapital == null || setAside.summary.miscCapital == null
+    ? null
+    : setAside.summary.puresafeCapital + setAside.summary.miscCapital;
+  const grossProfit = capital == null ? null : grossSales - capital;
+  const grossMargin = grossSales > 0 && grossProfit != null ? (grossProfit / grossSales) * 100 : null;
   return (
     <Stack spacing={4}>
       <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
         <DetailValue label="Recorded gross sales" value={formatCurrency(grossSales)} />
-        <DetailValue label="Less: capital used" value={formatCurrency(snapshot.summary.cogs)} />
-        <DetailValue label="Cash-basis gross profit" value={formatCurrency(grossProfit)} />
-        <DetailValue label="Cash-basis gross margin" value={formatPercent(grossMargin)} />
+        <DetailValue label="Less: total capital" value={capital == null ? "Unable to calculate" : formatCurrency(capital)} />
+        <DetailValue label="Cash-basis gross profit" value={grossProfit == null ? "Unable to calculate" : formatCurrency(grossProfit)} />
+        <DetailValue label="Cash-basis gross margin" value={grossMargin == null ? "Unable to calculate" : formatPercent(grossMargin)} />
       </SimpleGrid>
       <Text color="canvas.700">Payments cannot always be assigned to individual products, so actual profit is calculated for the selected period rather than estimated per product.</Text>
     </Stack>
   );
+}
+
+function SetAsideBreakdown({ cycles, detailView }: { cycles: ReportSetAside["cycles"]; detailView: string }) {
+  return cycles.length ? (
+    <Stack spacing={3}>
+      {cycles.map((cycle) => {
+        const totalCapital = cycle.puresafeCapital == null || cycle.miscCapital == null ? null : cycle.puresafeCapital + cycle.miscCapital;
+        const values: Record<string, string> = {
+          puresafeCapital: cycle.puresafeCapital == null ? "Unable to calculate" : `${cycle.puresafeBottlesToReplace} bottle(s) × ${formatCurrency(cycle.puresafeCostPerUnit)} = ${formatCurrency(cycle.puresafeCapital)}`,
+          electricityShare: `${cycle.cycleHours.toFixed(2)} hours × ${formatCurrency(cycle.electricityCostPerHour)} = ${formatCurrency(cycle.electricityShare)}`,
+          miscCapital: cycle.miscCapital == null ? "Unable to calculate" : formatCurrency(cycle.miscCapital),
+          totalCapital: totalCapital == null ? "Unable to calculate" : formatCurrency(totalCapital),
+          totalSetAside: cycle.totalSetAside == null ? "Unable to calculate" : formatCurrency(cycle.totalSetAside),
+          remainingEarnings: cycle.remainingEarnings == null ? "Unable to calculate" : formatCurrency(cycle.remainingEarnings),
+          cashAvailableAfterChangeFloat: formatCurrency(cycle.cashAvailableAfterChangeFloat),
+          availableOnlinePayments: formatCurrency(cycle.availableOnlinePayments),
+          totalAvailable: formatCurrency(cycle.totalAvailable),
+          shortfall: cycle.shortfall == null ? "Unable to calculate" : formatCurrency(cycle.shortfall),
+        };
+        return (
+          <Box key={cycle.cycleId} bg="canvas.50" borderRadius="20px" p={4}>
+            <HStack justify="space-between" align="start">
+              <Box><Text fontWeight="900">Cycle #{cycle.cycleNumber}</Text><Text color="canvas.700" mt={1}>{values[detailView]}</Text></Box>
+              <Button as={Link} to={`/history/${cycle.cycleId}`} size="sm" variant="outline">View cycle</Button>
+            </HStack>
+          </Box>
+        );
+      })}
+    </Stack>
+  ) : <Text color="canvas.700">No completed cycles in this reporting range.</Text>;
+}
+
+function CashFloatBreakdown({ cycles, detailView }: { cycles: ReportsSnapshot["reportCashFloats"]; detailView: string }) {
+  const visible = detailView === "unknownOpeningFloats" ? cycles.filter((cycle) => cycle.openingChangeFloat == null) : cycles;
+  return visible.length ? (
+    <Stack spacing={3}>
+      {visible.map((cycle) => {
+        const values: Record<string, string> = {
+          cashCounted: formatCurrency(cycle.cashCountedBeforeWithdrawal),
+          cashGenerated: cycle.cashGenerated == null ? "Cannot be determined" : formatCurrency(cycle.cashGenerated),
+          cashWithdrawn: formatCurrency(cycle.cashWithdrawn),
+          unknownOpeningFloats: "Opening change float is unknown; generated cash is excluded from the total.",
+        };
+        return <Box key={cycle.cycleId} bg="canvas.50" borderRadius="20px" p={4}><HStack justify="space-between" align="start"><Box><Text fontWeight="900">{cycle.cycleLabel}</Text><Text color="canvas.700" mt={1}>{values[detailView]}</Text></Box><Button as={Link} to={`/history/${cycle.cycleId}`} size="sm" variant="outline">View cycle</Button></HStack></Box>;
+      })}
+    </Stack>
+  ) : <Text color="canvas.700">No matching cycles in this reporting range.</Text>;
 }
 
 function PaymentRecordList({ records }: { records: ReportsSnapshot["reportPaymentRecords"] }) {

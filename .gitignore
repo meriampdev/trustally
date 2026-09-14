@@ -1,6 +1,9 @@
 node_modules/
 dist/
-supabase/
+supabase/*
+!supabase/migrations/
+supabase/migrations/*
+!supabase/migrations/20260915100000_correct_completed_box_cycles.sql
 .env
 *.tsbuildinfo
 vite.config.js

@@ -2,6 +2,14 @@ import {
   Box,
   Button,
   HStack,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
+  SimpleGrid,
   Spinner,
   Stack,
   Text,
@@ -9,9 +17,16 @@ import {
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { SectionCard } from "../components/SectionCard";
+import { PaymentDetailsModal } from "../components/PaymentDetailsModal";
 import { fetchCycleCashFloatDetail, fetchCycleDisclosureAndCollection, fetchCyclePaymentDetail, fetchHistoryFeed } from "../lib/api";
 import { formatCurrency, formatDateTimeLabel, formatPercent } from "../lib/format";
-import { HistoryFilter, HistoryItem } from "../lib/types";
+import { CycleCashFloatDetail, CycleHonestyDetail, CyclePaymentDetail, HistoryFilter, HistoryItem } from "../lib/types";
+
+interface EnrichedHistoryItem extends HistoryItem {
+  paymentDetail?: CyclePaymentDetail;
+  honestyDetail?: CycleHonestyDetail;
+  cashFloat?: CycleCashFloatDetail | null;
+}
 
 const filters: Array<{ value: HistoryFilter; label: string }> = [
   { value: "all", label: "All" },
@@ -22,8 +37,10 @@ const filters: Array<{ value: HistoryFilter; label: string }> = [
 
 export default function HistoryPage() {
   const [filter, setFilter] = useState<HistoryFilter>("box_checks");
-  const [items, setItems] = useState<HistoryItem[]>([]);
+  const [items, setItems] = useState<EnrichedHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedItem, setSelectedItem] = useState<EnrichedHistoryItem | null>(null);
+  const [paymentView, setPaymentView] = useState<{ item: EnrichedHistoryItem; channel: "cash" | "online" } | null>(null);
 
   useEffect(() => {
     void load(filter);
@@ -53,6 +70,8 @@ export default function HistoryPage() {
           cashPayments: payments.summary.cashPayments,
           onlinePayments: payments.summary.onlinePayments,
           cashFloat,
+          paymentDetail: payments,
+          honestyDetail: honesty,
         };
       }));
       setItems(currentItems);
@@ -98,11 +117,13 @@ export default function HistoryPage() {
               ) : null}
               {item.cycleId ? (
                 <HStack mt={4} spacing={3} flexWrap="wrap">
-                  {item.cashPayments != null ? <Button as={Link} to={`/history/${item.cycleId}?payments=cash`} size="sm" variant="outline">Cash {formatCurrency(item.cashPayments)}</Button> : null}
-                  {item.onlinePayments != null ? <Button as={Link} to={`/history/${item.cycleId}?payments=online`} size="sm" variant="outline">Online {formatCurrency(item.onlinePayments)}</Button> : null}
-                  <Button as={Link} to={`/history/${item.cycleId}`} size="sm" variant="outline">View all details</Button>
+                  {item.cashPayments != null ? <Button onClick={() => setPaymentView({ item, channel: "cash" })} size="sm" variant="outline">Cash {formatCurrency(item.cashPayments)}</Button> : null}
+                  {item.onlinePayments != null ? <Button onClick={() => setPaymentView({ item, channel: "online" })} size="sm" variant="outline">Online {formatCurrency(item.onlinePayments)}</Button> : null}
+                  <Button onClick={() => setSelectedItem(item)} size="sm" variant="outline">View details</Button>
                 </HStack>
-              ) : null}
+              ) : (
+                <Button mt={4} size="sm" variant="outline" onClick={() => setSelectedItem(item)}>View details</Button>
+              )}
             </SectionCard>
           ))}
         </Stack>
@@ -111,6 +132,52 @@ export default function HistoryPage() {
           <Text color="canvas.700">No matching history yet.</Text>
         </SectionCard>
       )}
+
+      <Modal isOpen={selectedItem !== null} onClose={() => setSelectedItem(null)} isCentered size="xl" scrollBehavior="inside">
+        <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
+        <ModalContent bg="canvas.100" border="1px solid" borderColor="whiteAlpha.200" borderRadius="28px" mx={4}>
+          <ModalHeader>{selectedItem?.title ?? "History details"}</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            {selectedItem ? (
+              <Stack spacing={4}>
+                <Text color="canvas.700">{formatDateTimeLabel(selectedItem.happenedAt)} · {selectedItem.subtitle}</Text>
+                <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
+                  {selectedItem.bottlesTaken != null ? <HistoryValue label="Bottles taken" value={String(selectedItem.bottlesTaken)} /> : null}
+                  {selectedItem.expectedRevenue != null ? <HistoryValue label="Expected revenue" value={formatCurrency(selectedItem.expectedRevenue)} /> : null}
+                  {selectedItem.totalCollected != null ? <HistoryValue label="Total collected" value={formatCurrency(selectedItem.totalCollected)} /> : null}
+                  {selectedItem.collectionRate != null ? <HistoryValue label="Collection rate" value={formatPercent(selectedItem.collectionRate)} /> : null}
+                  {selectedItem.honestyDetail ? <HistoryValue label="Disclosure honesty" value={formatPercent(selectedItem.honestyDetail.summary.disclosureRate)} /> : null}
+                  {selectedItem.honestyDetail ? <HistoryValue label="Payment required" value={formatCurrency(selectedItem.honestyDetail.summary.currentlyDueAmount)} /> : null}
+                  {selectedItem.quantity != null ? <HistoryValue label="Quantity" value={String(selectedItem.quantity)} /> : null}
+                </SimpleGrid>
+                {selectedItem.cashFloat ? (
+                  <Box bg="canvas.50" borderRadius="20px" p={4}>
+                    <Text fontWeight="900">Cash box flow</Text>
+                    <Text color="canvas.700" mt={2}>Opening {selectedItem.cashFloat.openingChangeFloat == null ? "Unknown" : formatCurrency(selectedItem.cashFloat.openingChangeFloat)} · Counted {formatCurrency(selectedItem.cashFloat.cashCountedBeforeWithdrawal)} · Generated {selectedItem.cashFloat.cashGenerated == null ? "Unknown" : formatCurrency(selectedItem.cashFloat.cashGenerated)} · Left for Change {formatCurrency(selectedItem.cashFloat.closingChangeFloat)} · Withdrawn {formatCurrency(selectedItem.cashFloat.cashWithdrawn)}</Text>
+                  </Box>
+                ) : null}
+              </Stack>
+            ) : null}
+          </ModalBody>
+          <ModalFooter gap={3}>
+            <Button variant="outline" onClick={() => setSelectedItem(null)}>Close</Button>
+            {selectedItem?.cycleId ? <Button as={Link} to={`/history/${selectedItem.cycleId}`}>Open full cycle</Button> : null}
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <PaymentDetailsModal
+        isOpen={paymentView !== null}
+        onClose={() => setPaymentView(null)}
+        title={paymentView?.channel === "cash" ? "Cash payment details" : "Online payment details"}
+        records={paymentView?.item.paymentDetail?.records ?? []}
+        channel={paymentView?.channel}
+      />
     </Stack>
   );
+}
+
+function HistoryValue({ label, value }: { label: string; value: string }) {
+  return <Box bg="canvas.50" borderRadius="18px" p={3}><Text color="canvas.700" fontSize="sm">{label}</Text><Text fontWeight="900" mt={1}>{value}</Text></Box>;
 }

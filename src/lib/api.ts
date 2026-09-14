@@ -7,6 +7,7 @@ import {
   CheckBoxDraftPayload,
   CheckBoxPreview,
   CheckBoxRefillInput,
+  CompletedCycleCorrectionInput,
   CycleCashFloatDetail,
   CycleDetail,
   CycleSetAside,
@@ -369,6 +370,25 @@ export async function updateCycleChangeFloat(input: {
     p_closing_change_float: input.closingChangeFloat ?? null,
     p_reason: input.reason,
   });
+}
+
+export async function correctCompletedBoxCycle(input: CompletedCycleCorrectionInput) {
+  try {
+    return await rpc<{ cycleId: string; corrected: boolean }>("correct_completed_box_cycle", {
+      p_cycle_id: input.cycleId,
+      p_cash_counted_before_withdrawal: input.cashCountedBeforeWithdrawal,
+      p_closing_change_float: input.closingChangeFloat,
+      p_gcash_collected: input.gcashCollected,
+      p_maya_collected: input.mayaCollected,
+      p_counts: input.counts,
+      p_reason: input.reason,
+    });
+  } catch (error) {
+    if (isMissingRpcError(error, "correct_completed_box_cycle")) {
+      throw new Error("The completed-cycle correction migration has not been applied to this database yet.");
+    }
+    throw error;
+  }
 }
 
 /** @deprecated Use fetchCycleDisclosureAndCollection. */

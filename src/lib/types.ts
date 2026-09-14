@@ -260,6 +260,16 @@ export interface BoxCheckCompletion {
   preview: CheckBoxPreview;
 }
 
+export interface CompletedCycleCorrectionInput {
+  cycleId: string;
+  cashCountedBeforeWithdrawal: string;
+  closingChangeFloat: string;
+  gcashCollected: string;
+  mayaCollected: string;
+  counts: CheckBoxCountInput[];
+  reason: string;
+}
+
 export interface HistoryItem {
   id: string;
   eventType: "box_check" | "stock_addition" | "adjustment";

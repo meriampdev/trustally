@@ -5,6 +5,13 @@ import {
   FormLabel,
   HStack,
   Input,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
   SimpleGrid,
   Spinner,
   Stack,
@@ -36,6 +43,7 @@ export default function ProductsPage() {
   const [form, setForm] = useState<ProductUpsertInput>(emptyForm);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
 
   useEffect(() => {
     void load();
@@ -60,6 +68,7 @@ export default function ProductsPage() {
     try {
       await upsertProduct(form);
       await load();
+      setIsProductModalOpen(false);
       setForm(emptyForm);
       toast({
         title: editingProduct ? "Product updated" : "Product created",
@@ -113,19 +122,33 @@ export default function ProductsPage() {
     }
   }
 
+  function openProductModal(product?: Product) {
+    setForm(product ? toProductForm(product, product.active) : { ...emptyForm });
+    setIsProductModalOpen(true);
+  }
+
+  function closeProductModal() {
+    if (isSaving) return;
+    setIsProductModalOpen(false);
+    setForm(emptyForm);
+  }
+
   return (
     <Stack spacing={5}>
-      <SectionCard
-        eyebrow={editingProduct ? "Edit product" : "Add product"}
-        title={
-          editingProduct
-            ? `Edit ${editingProduct.displayName}`
-            : "Add or update the products in your box"
-        }
-      >
+      <SectionCard eyebrow="Products" title="Manage the products in your box">
         <Text color="canvas.700">
           Changing today’s price or cost updates new stock going forward. Completed cycles keep the original snapshots.
         </Text>
+        <Button mt={4} onClick={() => openProductModal()}>Add product</Button>
+      </SectionCard>
+
+      <Modal isOpen={isProductModalOpen} onClose={closeProductModal} isCentered size="xl" scrollBehavior="inside" closeOnOverlayClick={!isSaving}>
+        <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
+        <ModalContent bg="canvas.100" border="1px solid" borderColor="whiteAlpha.200" borderRadius="28px" mx={4}>
+          <ModalHeader>{editingProduct ? `Edit ${editingProduct.displayName}` : "Add product"}</ModalHeader>
+          <ModalCloseButton isDisabled={isSaving} />
+          <ModalBody>
+            <Text color="canvas.700">Prices and costs apply going forward; completed-cycle snapshots stay unchanged.</Text>
         <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={4} mt={4}>
           <FormField label="Product name">
             <Input
@@ -213,17 +236,13 @@ export default function ProductsPage() {
         >
           Active product
         </Checkbox>
-        <HStack mt={5} spacing={3} flexWrap="wrap">
-          <Button onClick={() => void handleSave()} isLoading={isSaving}>
-            {editingProduct ? "Save changes" : "Create product"}
-          </Button>
-          {editingProduct ? (
-            <Button variant="outline" onClick={() => setForm(emptyForm)}>
-              Cancel editing
-            </Button>
-          ) : null}
-        </HStack>
-      </SectionCard>
+          </ModalBody>
+          <ModalFooter gap={3}>
+            <Button variant="outline" onClick={closeProductModal} isDisabled={isSaving}>Cancel</Button>
+            <Button onClick={() => void handleSave()} isLoading={isSaving}>{editingProduct ? "Save changes" : "Create product"}</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       <SectionCard eyebrow="Catalog" title="Current products">
         {isLoading ? (
@@ -246,7 +265,7 @@ export default function ProductsPage() {
                     </Text>
                   </Box>
                   <HStack spacing={3} flexWrap="wrap">
-                    <Button variant="outline" onClick={() => setForm(toProductForm(product, product.active))}>
+                    <Button variant="outline" onClick={() => openProductModal(product)}>
                       Edit product
                     </Button>
                     <Button
