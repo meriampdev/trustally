@@ -350,11 +350,15 @@ export async function fetchCycleSetAside(cycleId: string) {
   return rpc<CycleSetAside>("get_cycle_set_aside", { p_cycle_id: cycleId });
 }
 
-export async function fetchReportSetAside(rangeKey: string) {
+export async function fetchReportSetAside(
+  rangeKey: string,
+  startDate?: string | null,
+  endDate?: string | null,
+) {
   return rpc<ReportSetAside>("get_report_set_aside", {
     p_range_key: rangeKey,
-    p_start_date: null,
-    p_end_date: null,
+    p_start_date: startDate ?? null,
+    p_end_date: endDate ?? null,
   });
 }
 
@@ -496,42 +500,46 @@ export async function deleteRetroactiveOnlinePayment(id: string) {
   );
 }
 
-export async function fetchReportsSnapshot(rangeKey: string) {
+export async function fetchReportsSnapshot(
+  rangeKey: string,
+  startDate?: string | null,
+  endDate?: string | null,
+) {
   const [snapshot, balances, disclosureCollection, drilldown, paymentDetail, cashFloatDetail] = await Promise.all([
     rpc<Partial<ReportsSnapshot> | null>("get_reports_snapshot", {
       p_range_key: rangeKey,
-      p_start_date: null,
-      p_end_date: null,
+      p_start_date: startDate ?? null,
+      p_end_date: endDate ?? null,
     }),
     fetchOutstandingBalances(),
     rpc<Partial<DisclosureCollectionReport> | null>("get_disclosure_collection_report", {
       p_range_key: rangeKey,
-      p_start_date: null,
-      p_end_date: null,
+      p_start_date: startDate ?? null,
+      p_end_date: endDate ?? null,
     }).catch((error) => {
       if (isMissingRpcError(error, "get_disclosure_collection_report")) return null;
       throw error;
     }),
     rpc<Partial<ReportDrilldown> | null>("get_report_drilldown", {
       p_range_key: rangeKey,
-      p_start_date: null,
-      p_end_date: null,
+      p_start_date: startDate ?? null,
+      p_end_date: endDate ?? null,
     }).catch((error) => {
       if (isMissingRpcError(error, "get_report_drilldown")) return null;
       throw error;
     }),
     rpc<Partial<ReportPaymentDetail> | null>("get_report_payment_detail", {
       p_range_key: rangeKey,
-      p_start_date: null,
-      p_end_date: null,
+      p_start_date: startDate ?? null,
+      p_end_date: endDate ?? null,
     }).catch((error) => {
       if (isMissingRpcError(error, "get_report_payment_detail")) return null;
       throw error;
     }),
     rpc<ReportCashFloatDetail | null>("get_report_change_float_detail", {
       p_range_key: rangeKey,
-      p_start_date: null,
-      p_end_date: null,
+      p_start_date: startDate ?? null,
+      p_end_date: endDate ?? null,
     }).catch((error) => {
       if (isMissingRpcError(error, "get_report_change_float_detail")) return null;
       throw error;

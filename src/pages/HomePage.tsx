@@ -17,6 +17,7 @@ import {
 } from "@chakra-ui/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { DateRangeModal } from "../components/DateRangeModal";
 import { MetricCard } from "../components/MetricCard";
 import { PaymentDetailsModal } from "../components/PaymentDetailsModal";
 import { SectionCard } from "../components/SectionCard";
@@ -42,19 +43,15 @@ import {
   formatDurationFromNow,
   formatPercent,
 } from "../lib/format";
+import { formatReportDateRange, ReportRangeKey, reportRangeOptions } from "../lib/reportRange";
 import { CashMovement, CycleCashFloatDetail, CycleHonestyDetail, CyclePaymentDetail, CyclePaymentRecord, CycleSetAside, HistoryItem, HomeDashboard, PayLaterBalance, Product, ReportSetAside, ReportsSnapshot } from "../lib/types";
 
-type MetricsRange = "latest" | "7d" | "30d" | "month" | "3m" | "6m" | "1y";
+type MetricsRange = "latest" | ReportRangeKey;
 type DashboardDetail = { title: string; description: string; values: Array<[string, string]>; route?: string; routeLabel?: string };
 
 const metricsRangeOptions: Array<{ value: MetricsRange; label: string }> = [
   { value: "latest", label: "Latest cycle" },
-  { value: "7d", label: "7 days" },
-  { value: "30d", label: "30 days" },
-  { value: "month", label: "This month" },
-  { value: "3m", label: "3 months" },
-  { value: "6m", label: "6 months" },
-  { value: "1y", label: "1 year" },
+  ...reportRangeOptions,
 ];
 
 export default function HomePage() {
@@ -72,6 +69,9 @@ export default function HomePage() {
   const [currentCashFloat, setCurrentCashFloat] = useState<CycleCashFloatDetail | null>(null);
   const [paymentDetailView, setPaymentDetailView] = useState<CyclePaymentRecord["channel"] | "all" | null>(null);
   const [metricsRange, setMetricsRange] = useState<MetricsRange>("latest");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+  const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
   const [rangeMetrics, setRangeMetrics] = useState<ReportsSnapshot | null>(null);
   const [rangeSetAside, setRangeSetAside] = useState<ReportSetAside | null>(null);
   const [isMetricsLoading, setIsMetricsLoading] = useState(false);
@@ -93,12 +93,18 @@ export default function HomePage() {
       setIsMetricsLoading(false);
       return;
     }
+    if (metricsRange === "custom" && (!customStartDate || !customEndDate)) return;
 
     setIsMetricsLoading(true);
     setRangeMetrics(null);
     setRangeSetAside(null);
     setMetricsError("");
-    void Promise.all([fetchReportsSnapshot(metricsRange), fetchReportSetAside(metricsRange)])
+    const startDate = metricsRange === "custom" ? customStartDate : null;
+    const endDate = metricsRange === "custom" ? customEndDate : null;
+    void Promise.all([
+      fetchReportsSnapshot(metricsRange, startDate, endDate),
+      fetchReportSetAside(metricsRange, startDate, endDate),
+    ])
       .then(([result, setAsideResult]) => {
         if (!cancelled) {
           setRangeMetrics(result);
@@ -113,7 +119,7 @@ export default function HomePage() {
       });
 
     return () => { cancelled = true; };
-  }, [metricsRange, currentLocationId]);
+  }, [metricsRange, customStartDate, customEndDate, currentLocationId]);
 
   async function load(selectedLocationId?: string | null) {
     setIsLoading(true);
@@ -243,7 +249,9 @@ export default function HomePage() {
   const metricsAvailable = isLatestMetrics ? Boolean(dashboard.recentResult) : Boolean(rangeMetrics);
   const metricsTitle = isLatestMetrics
     ? dashboard.recentResult?.label ?? "No completed checks yet"
-    : metricsRangeOptions.find((option) => option.value === metricsRange)?.label ?? "Selected period";
+    : metricsRange === "custom"
+      ? formatReportDateRange(customStartDate, customEndDate)
+      : metricsRangeOptions.find((option) => option.value === metricsRange)?.label ?? "Selected period";
   const metricsHonestyRate = isLatestMetrics ? recentHonesty?.summary.disclosureRate ?? null : rangeMetrics?.summary.disclosureRate ?? null;
   const metricsPaymentTotal = isLatestMetrics
     ? recentCyclePayments?.summary.totalPayments ?? recentHonesty?.summary.totalPayments ?? dashboard.recentResult?.immediatePayments ?? 0
@@ -411,9 +419,17 @@ export default function HomePage() {
               key={option.value}
               size="sm"
               variant={metricsRange === option.value ? "solid" : "outline"}
-              onClick={() => setMetricsRange(option.value)}
+              onClick={() => {
+                if (option.value === "custom") {
+                  setIsDateRangeOpen(true);
+                } else {
+                  setMetricsRange(option.value);
+                }
+              }}
             >
-              {option.label}
+              {option.value === "custom" && metricsRange === "custom"
+                ? formatReportDateRange(customStartDate, customEndDate)
+                : option.label}
             </Button>
           ))}
         </HStack>
@@ -664,6 +680,19 @@ export default function HomePage() {
         title={paymentDetailView === "cash" ? "Cash payment details" : paymentDetailView === "online" ? "Online payment details" : "Gross sales payment details"}
         records={metricsPaymentRecords}
         channel={paymentDetailView === "cash" || paymentDetailView === "online" ? paymentDetailView : undefined}
+      />
+
+      <DateRangeModal
+        isOpen={isDateRangeOpen}
+        onClose={() => setIsDateRangeOpen(false)}
+        startDate={customStartDate}
+        endDate={customEndDate}
+        title="Filter dashboard metrics by date"
+        onApply={(startDate, endDate) => {
+          setCustomStartDate(startDate);
+          setCustomEndDate(endDate);
+          setMetricsRange("custom");
+        }}
       />
 
       <Modal isOpen={dashboardDetail !== null} onClose={() => setDashboardDetail(null)} isCentered size="lg">

@@ -17,19 +17,23 @@ import {
 } from "@chakra-ui/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { DateRangeModal } from "../components/DateRangeModal";
 import { MetricCard } from "../components/MetricCard";
 import { SectionCard } from "../components/SectionCard";
 import { fetchReportsSnapshot, fetchReportSetAside } from "../lib/api";
 import { formatCurrency, formatManilaDateTime, formatPercent } from "../lib/format";
+import { formatReportDateRange, ReportRangeKey, reportRangeOptions } from "../lib/reportRange";
 import { ReportsSnapshot, ReportSetAside } from "../lib/types";
 
-const rangeOptions = ["7d", "30d", "month", "3m", "6m", "1y"];
-
 export default function ReportsPage() {
-  const [rangeKey, setRangeKey] = useState("30d");
+  const [rangeKey, setRangeKey] = useState<ReportRangeKey>("30d");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+  const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<ReportsSnapshot | null>(null);
   const [setAside, setSetAside] = useState<ReportSetAside | null>(null);
   const [detailView, setDetailView] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
   const expectedVsCollected = Array.isArray(snapshot?.expectedVsCollected)
     ? snapshot.expectedVsCollected
     : [];
@@ -47,14 +51,29 @@ export default function ReportsPage() {
 
     
   useEffect(() => {
+    if (rangeKey === "custom" && (!customStartDate || !customEndDate)) return;
+    let cancelled = false;
     setSnapshot(null);
     setSetAside(null);
-    void Promise.all([fetchReportsSnapshot(rangeKey), fetchReportSetAside(rangeKey)])
+    setDetailView(null);
+    setErrorMessage("");
+    const startDate = rangeKey === "custom" ? customStartDate : null;
+    const endDate = rangeKey === "custom" ? customEndDate : null;
+    void Promise.all([
+      fetchReportsSnapshot(rangeKey, startDate, endDate),
+      fetchReportSetAside(rangeKey, startDate, endDate),
+    ])
       .then(([nextSnapshot, nextSetAside]) => {
-        setSnapshot(nextSnapshot);
-        setSetAside(nextSetAside);
+        if (!cancelled) {
+          setSnapshot(nextSnapshot);
+          setSetAside(nextSetAside);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) setErrorMessage(error instanceof Error ? error.message : "Could not load this report.");
       });
-  }, [rangeKey]);
+    return () => { cancelled = true; };
+  }, [rangeKey, customStartDate, customEndDate]);
 
   const maxRevenue = useMemo(
     () =>
@@ -66,6 +85,10 @@ export default function ReportsPage() {
       ),
     [expectedVsCollected],
   );
+
+  if (errorMessage) {
+    return <Text color="caution.600">{errorMessage}</Text>;
+  }
 
   if (!snapshot || !setAside) {
     return <Spinner color="brand.400" />;
@@ -82,16 +105,29 @@ export default function ReportsPage() {
     <Stack spacing={5}>
       <SectionCard eyebrow="Range" title="Choose a reporting window">
         <HStack spacing={3} flexWrap="wrap">
-          {rangeOptions.map((item) => (
+          {reportRangeOptions.map((option) => (
             <Button
-              key={item}
-              variant={rangeKey === item ? "solid" : "subtle"}
-              onClick={() => setRangeKey(item)}
+              key={option.value}
+              variant={rangeKey === option.value ? "solid" : "subtle"}
+              onClick={() => {
+                if (option.value === "custom") {
+                  setIsDateRangeOpen(true);
+                } else {
+                  setRangeKey(option.value);
+                }
+              }}
             >
-              {item}
+              {option.value === "custom" && rangeKey === "custom"
+                ? formatReportDateRange(customStartDate, customEndDate)
+                : option.label}
             </Button>
           ))}
         </HStack>
+        <Text color="canvas.700" fontSize="sm" mt={3}>
+          Showing completed cycles from {rangeKey === "custom"
+            ? formatReportDateRange(customStartDate, customEndDate)
+            : reportRangeOptions.find((option) => option.value === rangeKey)?.label.toLowerCase()}.
+        </Text>
       </SectionCard>
 
       <SectionCard eyebrow="Operational totals" title="What happened during these cycles">
@@ -280,6 +316,19 @@ export default function ReportsPage() {
           <ModalFooter><Button onClick={() => setDetailView(null)}>Close</Button></ModalFooter>
         </ModalContent>
       </Modal>
+
+      <DateRangeModal
+        isOpen={isDateRangeOpen}
+        onClose={() => setIsDateRangeOpen(false)}
+        startDate={customStartDate}
+        endDate={customEndDate}
+        title="Filter reports by date"
+        onApply={(startDate, endDate) => {
+          setCustomStartDate(startDate);
+          setCustomEndDate(endDate);
+          setRangeKey("custom");
+        }}
+      />
     </Stack>
   );
 }
