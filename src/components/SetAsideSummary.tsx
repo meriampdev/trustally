@@ -1,6 +1,7 @@
 import { Box, Button, SimpleGrid, Stack, Text } from "@chakra-ui/react";
 import { Link } from "react-router-dom";
 import { formatCurrency } from "../lib/format";
+import { calculateCashOnlySetAside } from "../lib/setAside";
 import { CycleSetAside } from "../lib/types";
 import { MetricCard } from "./MetricCard";
 
@@ -11,23 +12,36 @@ export function SetAsideSummary({ value, onMetricClick }: { value: CycleSetAside
   const totalValue = value.totalSetAside == null ? "Unable to calculate" : formatCurrency(value.totalSetAside);
   const earningsValue = value.remainingEarnings == null ? "Unable to calculate" : formatCurrency(value.remainingEarnings);
   const shortfallValue = value.shortfall == null ? "Unable to calculate" : formatCurrency(value.shortfall);
+  const cashAfterSetAside = calculateCashOnlySetAside(value).cashAfterSetAside;
 
   return (
     <Stack spacing={4}>
-      <SimpleGrid columns={{ base: 2, md: 3 }} spacing={4}>
-        <MetricCard label="Cash after change float" value={formatCurrency(value.cashAvailableAfterChangeFloat)} onClick={onMetricClick ? () => onMetricClick("cashAvailableAfterChangeFloat") : undefined} />
-        <MetricCard label="Available online payments" value={formatCurrency(value.availableOnlinePayments)} onClick={onMetricClick ? () => onMetricClick("availableOnlinePayments") : undefined} />
-        <MetricCard label="Total available" value={formatCurrency(value.totalAvailable)} onClick={onMetricClick ? () => onMetricClick("totalAvailable") : undefined} />
+      <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={4}>
+        <MetricCard label="Cash available for reserves" value={formatCurrency(value.cashAvailableAfterChangeFloat)} hint="After preserving the change float" onClick={onMetricClick ? () => onMetricClick("cashAvailableAfterChangeFloat") : undefined} />
         <MetricCard label="Puresafe Capital" value={puresafeValue} onClick={onMetricClick ? () => onMetricClick("puresafeCapital") : undefined} />
         <MetricCard label="Electricity Share" value={formatCurrency(value.electricityShare)} hint={value.isEstimate ? "Estimated for the active cycle" : undefined} onClick={onMetricClick ? () => onMetricClick("electricityShare") : undefined} />
         <MetricCard label="Other Products Capital" value={value.miscCapital == null ? "Unable to calculate" : formatCurrency(value.miscCapital)} onClick={onMetricClick ? () => onMetricClick("miscCapital") : undefined} />
         <MetricCard label="Total set aside" value={totalValue} onClick={onMetricClick ? () => onMetricClick("totalSetAside") : undefined} />
-        <MetricCard label="To Stash" value={earningsValue} hint="Net profit available after change float and all reserves" onClick={onMetricClick ? () => onMetricClick("remainingEarnings") : undefined} />
-        <MetricCard label="Shortfall" value={shortfallValue} onClick={onMetricClick ? () => onMetricClick("shortfall") : undefined} />
+        <MetricCard label="Cash shortfall" value={shortfallValue} hint="Reserves not covered by available cash" onClick={onMetricClick ? () => onMetricClick("shortfall") : undefined} />
+        <MetricCard
+          label="To Stash"
+          value={earningsValue}
+          hint="Untouched online payments plus cash left after reserves"
+          accent={(
+            <StashBreakdown
+              availableOnlinePayments={value.availableOnlinePayments}
+              cashAfterSetAside={cashAfterSetAside}
+            />
+          )}
+          onClick={onMetricClick ? () => onMetricClick("remainingEarnings") : undefined}
+        />
       </SimpleGrid>
 
       <Box bg="canvas.50" borderRadius="20px" p={4}>
         <Text fontWeight="900">Calculation</Text>
+        <Text color="canvas.700" mt={1}>
+          Set aside is deducted from cash only. Online payments remain untouched.
+        </Text>
         {value.missingPuresafeCost ? (
           <Stack mt={2} spacing={2}>
             <Text color="caution.600">Puresafe capital cannot be calculated because its cost per unit is missing.</Text>
@@ -54,7 +68,27 @@ export function SetAsideSummary({ value, onMetricClick }: { value: CycleSetAside
         {value.missingMiscellaneousCost ? (
           <Button as={Link} to="/products" size="sm" variant="outline" mt={3}>Complete product costs</Button>
         ) : null}
+        {cashAfterSetAside != null ? (
+          <Text color="canvas.700" mt={2}>
+            Cash after set aside: {formatCurrency(cashAfterSetAside)} · Online to stash: {formatCurrency(value.availableOnlinePayments)}
+          </Text>
+        ) : null}
       </Box>
+    </Stack>
+  );
+}
+
+export function StashBreakdown({
+  availableOnlinePayments,
+  cashAfterSetAside,
+}: {
+  availableOnlinePayments: number;
+  cashAfterSetAside: number | null;
+}) {
+  return (
+    <Stack spacing={0.5} mt={2} color="canvas.700" fontSize="sm" lineHeight="short">
+      <Text>Online payments: {formatCurrency(availableOnlinePayments)}</Text>
+      <Text>Cash after reserves: {cashAfterSetAside == null ? "Unable to calculate" : formatCurrency(cashAfterSetAside)}</Text>
     </Stack>
   );
 }

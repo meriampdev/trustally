@@ -17,6 +17,22 @@ html {
   background: #0b1726;
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+@supports (overflow: clip) {
+  html,
+  body,
+  #root {
+    overflow-x: clip;
+  }
+}
+
 body {
   margin: 0;
   min-width: 320px;

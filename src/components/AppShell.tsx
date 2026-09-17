@@ -135,7 +135,7 @@ export function AppShell({ children }: AppShellProps) {
   }
 
   return (
-    <Flex minH="100dvh">
+    <Flex minH="100dvh" width="100%" maxWidth="100%" minWidth={0} overflowX="hidden">
       <Box display={{ base: "none", lg: "flex" }} position="fixed" insetY="0" left="0" w="280px" p={6}>
         <VStack
           align="stretch"
@@ -209,6 +209,10 @@ export function AppShell({ children }: AppShellProps) {
 
       <Box
         flex="1"
+        width="100%"
+        maxWidth="100%"
+        minWidth={0}
+        overflowX="hidden"
         ml={{ base: 0, lg: "280px" }}
         pb={{ base: "calc(var(--bottom-nav-height) + var(--safe-area-bottom) + 16px)", lg: 10 }}
       >
@@ -228,8 +232,8 @@ export function AppShell({ children }: AppShellProps) {
             <Text fontWeight="700">Offline mode is on. Drafts stay on this device and will sync later.</Text>
           </Box>
         ) : null}
-        <Container maxW="none" px={{ base: 4, md: 6, xl: 8 }} pt={{ base: "calc(var(--safe-area-top) + 16px)", lg: 8 }}>
-          <Box maxW="1160px" w="full">
+        <Container maxW="none" minW={0} px={{ base: 4, md: 6, xl: 8 }} pt={{ base: "calc(var(--safe-area-top) + 16px)", lg: 8 }}>
+          <Box maxW="1160px" w="full" minW={0}>
             <HStack justify="space-between" align="end" mb={{ base: 4, md: 6 }}>
               <HStack minW={0} spacing={3} align="center">
                 <BrandMark size={44} />
@@ -264,7 +268,7 @@ export function AppShell({ children }: AppShellProps) {
                 </Box>
               ) : null}
             </HStack>
-            <Box key={currentLocationId ?? "default-location"}>{children}</Box>
+            <Box key={currentLocationId ?? "default-location"} width="100%" minWidth={0}>{children}</Box>
           </Box>
         </Container>
       </Box>

@@ -23,7 +23,7 @@ import { MetricCard } from "../components/MetricCard";
 import { PaymentDetailsModal } from "../components/PaymentDetailsModal";
 import { CycleHonestyPanel } from "../components/CycleHonestyPanel";
 import { SectionCard } from "../components/SectionCard";
-import { SetAsideSummary } from "../components/SetAsideSummary";
+import { SetAsideSummary, StashBreakdown } from "../components/SetAsideSummary";
 import { correctCompletedBoxCycle, fetchCycleCashFloatDetail, fetchCycleDetail, fetchCycleDisclosureAndCollection, fetchCyclePaymentDetail, fetchCycleSetAside, updateCycleChangeFloat } from "../lib/api";
 import {
   formatCurrency,
@@ -238,7 +238,19 @@ export default function CycleDetailPage() {
           <MetricCard label="Other Products Capital" value={setAside.miscCapital == null ? "Unable to calculate" : formatCurrency(setAside.miscCapital)} hint="Replacement cost for every depleted non-Puresafe product" />
           <MetricCard label="Total Capital" value={totalCapital == null ? "Unable to calculate" : formatCurrency(totalCapital)} />
           <MetricCard label="Total Set Aside" value={setAside.totalSetAside == null ? "Unable to calculate" : formatCurrency(setAside.totalSetAside)} />
-          <MetricCard label="Remaining After Set Aside" value={setAside.remainingEarnings == null ? "Unable to calculate" : formatCurrency(setAside.remainingEarnings)} hint="Net profit available after change float and all reserves" />
+          <MetricCard
+            label="To Stash"
+            value={setAside.remainingEarnings == null ? "Unable to calculate" : formatCurrency(setAside.remainingEarnings)}
+            hint="Untouched online payments plus cash left after reserves"
+            accent={(
+              <StashBreakdown
+                availableOnlinePayments={setAside.availableOnlinePayments}
+                cashAfterSetAside={setAside.totalSetAside == null
+                  ? null
+                  : Math.max(setAside.cashAvailableAfterChangeFloat - setAside.totalSetAside, 0)}
+              />
+            )}
+          />
         </SimpleGrid>
         <Text color="canvas.700" mt={3}>Started {formatDateTimeLabel(detail.startedAt)} · Completed {formatDateTimeLabel(detail.completedAt)}</Text>
       </SectionCard>

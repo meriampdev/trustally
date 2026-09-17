@@ -42,6 +42,7 @@ import {
   formatPercent,
   parseNumberInput,
 } from "../lib/format";
+import { calculateCashOnlySetAside } from "../lib/setAside";
 import {
   CashMovement,
   CheckBoxDraft,
@@ -352,6 +353,11 @@ export default function CheckBoxPage() {
     const totalSetAside = puresafeCapital == null || miscCapital == null
       ? null
       : puresafeCapital + electricityShare + miscCapital;
+    const cashOnlySetAside = calculateCashOnlySetAside({
+      cashAvailableAfterChangeFloat,
+      availableOnlinePayments,
+      totalSetAside,
+    });
 
     return {
       cycleId: serverDraft.cycleId,
@@ -380,8 +386,8 @@ export default function CheckBoxPage() {
       missingMiscellaneousCost,
       miscellaneousProductBreakdown,
       totalSetAside,
-      remainingEarnings: totalSetAside == null ? null : Math.max(totalAvailable - totalSetAside, 0),
-      shortfall: totalSetAside == null ? null : Math.max(totalSetAside - totalAvailable, 0),
+      remainingEarnings: cashOnlySetAside.remainingEarnings,
+      shortfall: cashOnlySetAside.shortfall,
       settingsSnapshottedAt: null,
     };
   }, [activeCyclePayments, cashCountedBeforeWithdrawal, closingChangeFloat, draft, products, resolvedPreview, serverDraft, settings]);

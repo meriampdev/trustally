@@ -34,6 +34,7 @@ import {
   SetupProductInput,
   StockAdditionLineInput,
 } from "./types";
+import { applyCashOnlyCycleSetAside, applyCashOnlyReportSetAside } from "./setAside";
 
 export async function fetchHomeDashboard(selectedLocationId?: string | null) {
   const dashboard = await rpc<Partial<HomeDashboard> | Record<string, unknown> | null>(
@@ -347,7 +348,8 @@ export async function fetchCycleCashFloatDetail(cycleId: string) {
 }
 
 export async function fetchCycleSetAside(cycleId: string) {
-  return rpc<CycleSetAside>("get_cycle_set_aside", { p_cycle_id: cycleId });
+  const value = await rpc<CycleSetAside>("get_cycle_set_aside", { p_cycle_id: cycleId });
+  return applyCashOnlyCycleSetAside(value);
 }
 
 export async function fetchReportSetAside(
@@ -355,11 +357,12 @@ export async function fetchReportSetAside(
   startDate?: string | null,
   endDate?: string | null,
 ) {
-  return rpc<ReportSetAside>("get_report_set_aside", {
+  const value = await rpc<ReportSetAside>("get_report_set_aside", {
     p_range_key: rangeKey,
     p_start_date: startDate ?? null,
     p_end_date: endDate ?? null,
   });
+  return applyCashOnlyReportSetAside(value);
 }
 
 export async function updateCycleChangeFloat(input: {

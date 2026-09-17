@@ -20,9 +20,11 @@ import { Link } from "react-router-dom";
 import { DateRangeModal } from "../components/DateRangeModal";
 import { MetricCard } from "../components/MetricCard";
 import { SectionCard } from "../components/SectionCard";
+import { StashBreakdown } from "../components/SetAsideSummary";
 import { fetchReportsSnapshot, fetchReportSetAside } from "../lib/api";
 import { formatCurrency, formatManilaDateTime, formatPercent } from "../lib/format";
 import { formatReportDateRange, ReportRangeKey, reportRangeOptions } from "../lib/reportRange";
+import { calculateCashOnlySetAside } from "../lib/setAside";
 import { ReportsSnapshot, ReportSetAside } from "../lib/types";
 
 export default function ReportsPage() {
@@ -150,26 +152,37 @@ export default function ReportsPage() {
           <MetricCard label="Other Products Capital" value={setAside.summary.miscCapital == null ? "Unable to calculate" : formatCurrency(setAside.summary.miscCapital)} hint="View product replacement capital by cycle" onClick={() => setDetailView("miscCapital")} />
           <MetricCard label="Total Capital" value={totalCapital == null ? "Unable to calculate" : formatCurrency(totalCapital)} hint="View capital components by cycle" onClick={() => setDetailView("totalCapital")} />
           <MetricCard label="Total Set Aside" value={setAside.summary.totalSetAside == null ? "Unable to calculate" : formatCurrency(setAside.summary.totalSetAside)} hint="View reserves by cycle" onClick={() => setDetailView("totalSetAside")} />
-          <MetricCard label="To Stash" value={setAside.summary.remainingEarnings == null ? "Unable to calculate" : formatCurrency(setAside.summary.remainingEarnings)} hint="View remaining earnings by cycle" onClick={() => setDetailView("remainingEarnings")} />
+          <MetricCard
+            label="To Stash"
+            value={setAside.summary.remainingEarnings == null ? "Unable to calculate" : formatCurrency(setAside.summary.remainingEarnings)}
+            hint="Untouched online plus cash left after reserves"
+            accent={(
+              <StashBreakdown
+                availableOnlinePayments={setAside.summary.availableOnlinePayments}
+                cashAfterSetAside={setAside.summary.remainingEarnings == null
+                  ? null
+                  : Math.max(setAside.summary.remainingEarnings - setAside.summary.availableOnlinePayments, 0)}
+              />
+            )}
+            onClick={() => setDetailView("remainingEarnings")}
+          />
         </SimpleGrid>
         <Text color="canvas.700" fontSize="sm" mt={3}>Gross sales use actual recorded payments. Change float stays in the box and is excluded from Set Aside and earnings.</Text>
       </SectionCard>
 
       <SectionCard eyebrow="Set Aside" title="Automatic reserves by cycle">
         <SimpleGrid columns={{ base: 2, xl: 4 }} spacing={4}>
-          <MetricCard label="Cash after change float" value={formatCurrency(setAside.summary.cashAvailableAfterChangeFloat)} hint="View by cycle" onClick={() => setDetailView("cashAvailableAfterChangeFloat")} />
-          <MetricCard label="Available online payments" value={formatCurrency(setAside.summary.availableOnlinePayments)} hint="View by cycle" onClick={() => setDetailView("availableOnlinePayments")} />
-          <MetricCard label="Total available" value={formatCurrency(setAside.summary.totalAvailable)} hint="View by cycle" onClick={() => setDetailView("totalAvailable")} />
+          <MetricCard label="Cash available for reserves" value={formatCurrency(setAside.summary.cashAvailableAfterChangeFloat)} hint="After preserving change float" onClick={() => setDetailView("cashAvailableAfterChangeFloat")} />
           <MetricCard label="Other products capital" value={setAside.summary.miscCapital == null ? "Unable to calculate" : formatCurrency(setAside.summary.miscCapital)} hint="View by cycle" onClick={() => setDetailView("miscCapital")} />
           <MetricCard label="Total set aside" value={setAside.summary.totalSetAside == null ? "Unable to calculate" : formatCurrency(setAside.summary.totalSetAside)} hint="View by cycle" onClick={() => setDetailView("totalSetAside")} />
-          <MetricCard label="Shortfall" value={setAside.summary.shortfall == null ? "Unable to calculate" : formatCurrency(setAside.summary.shortfall)} hint="View by cycle" onClick={() => setDetailView("shortfall")} />
+          <MetricCard label="Cash shortfall" value={setAside.summary.shortfall == null ? "Unable to calculate" : formatCurrency(setAside.summary.shortfall)} hint="Reserves not covered by cash" onClick={() => setDetailView("shortfall")} />
         </SimpleGrid>
         <Stack spacing={3} mt={4}>
           {setAside.cycles.map((cycle) => (
             <Box key={cycle.cycleId} as="button" width="100%" textAlign="left" cursor="pointer" borderRadius="24px" bg="canvas.50" p={4} _hover={{ bg: "whiteAlpha.100" }} onClick={() => setDetailView(`cycle:${cycle.cycleId}`)}>
               <Text fontWeight="900">Cycle #{cycle.cycleNumber}</Text>
-              <Text color="canvas.700" mt={1}>Available {formatCurrency(cycle.totalAvailable)} · Puresafe {cycle.missingPuresafeCost ? "Unable to calculate" : formatCurrency(cycle.puresafeCapital)} · Electricity {formatCurrency(cycle.electricityShare)}</Text>
-              <Text color="canvas.700" mt={1}>Total set aside {cycle.totalSetAside == null ? "Unable to calculate" : formatCurrency(cycle.totalSetAside)} · Remaining {cycle.remainingEarnings == null ? "Unable to calculate" : formatCurrency(cycle.remainingEarnings)} · Shortfall {cycle.shortfall == null ? "Unable to calculate" : formatCurrency(cycle.shortfall)}</Text>
+              <Text color="canvas.700" mt={1}>Cash for reserves {formatCurrency(cycle.cashAvailableAfterChangeFloat)}</Text>
+              <Text color="canvas.700" mt={1}>Total set aside {cycle.totalSetAside == null ? "Unable to calculate" : formatCurrency(cycle.totalSetAside)} · To Stash {cycle.remainingEarnings == null ? "Unable to calculate" : formatCurrency(cycle.remainingEarnings)} · Cash shortfall {cycle.shortfall == null ? "Unable to calculate" : formatCurrency(cycle.shortfall)}</Text>
             </Box>
           ))}
         </Stack>
@@ -362,10 +375,10 @@ const detailTitles: Record<string, string> = {
   totalCapital: "Total capital by cycle",
   totalSetAside: "Total set aside by cycle",
   remainingEarnings: "To Stash by cycle",
-  cashAvailableAfterChangeFloat: "Cash after change float",
-  availableOnlinePayments: "Available online payments",
-  totalAvailable: "Total available by cycle",
-  shortfall: "Shortfall by cycle",
+  cashAvailableAfterChangeFloat: "Cash available for reserves",
+  availableOnlinePayments: "Untouched online payments",
+  totalAvailable: "Cash + online total by cycle",
+  shortfall: "Cash shortfall by cycle",
   cashCounted: "Cash counted by cycle",
   cashGenerated: "Customer cash generated by cycle",
   cashWithdrawn: "Cash withdrawn by cycle",
@@ -516,17 +529,22 @@ function SetAsideBreakdown({ cycles, detailView }: { cycles: ReportSetAside["cyc
     <Stack spacing={3}>
       {cycles.map((cycle) => {
         const totalCapital = cycle.puresafeCapital == null || cycle.miscCapital == null ? null : cycle.puresafeCapital + cycle.miscCapital;
+        const cashOnlySetAside = calculateCashOnlySetAside(cycle);
         const values: Record<string, string> = {
           puresafeCapital: cycle.puresafeCapital == null ? "Unable to calculate" : `${cycle.puresafeBottlesToReplace} bottle(s) × ${formatCurrency(cycle.puresafeCostPerUnit)} = ${formatCurrency(cycle.puresafeCapital)}`,
           electricityShare: `${cycle.cycleHours.toFixed(2)} hours × ${formatCurrency(cycle.electricityCostPerHour)} = ${formatCurrency(cycle.electricityShare)}`,
           miscCapital: cycle.miscCapital == null ? "Unable to calculate" : formatCurrency(cycle.miscCapital),
           totalCapital: totalCapital == null ? "Unable to calculate" : formatCurrency(totalCapital),
           totalSetAside: cycle.totalSetAside == null ? "Unable to calculate" : formatCurrency(cycle.totalSetAside),
-          remainingEarnings: cycle.remainingEarnings == null ? "Unable to calculate" : formatCurrency(cycle.remainingEarnings),
+          remainingEarnings: cycle.remainingEarnings == null
+            ? "Unable to calculate"
+            : `${formatCurrency(cycle.availableOnlinePayments)} online untouched + ${formatCurrency(cashOnlySetAside.cashAfterSetAside)} cash after reserves = ${formatCurrency(cycle.remainingEarnings)}`,
           cashAvailableAfterChangeFloat: formatCurrency(cycle.cashAvailableAfterChangeFloat),
           availableOnlinePayments: formatCurrency(cycle.availableOnlinePayments),
           totalAvailable: formatCurrency(cycle.totalAvailable),
-          shortfall: cycle.shortfall == null ? "Unable to calculate" : formatCurrency(cycle.shortfall),
+          shortfall: cycle.shortfall == null
+            ? "Unable to calculate"
+            : `${formatCurrency(cycle.totalSetAside)} reserves − ${formatCurrency(cycle.cashAvailableAfterChangeFloat)} available cash = ${formatCurrency(cycle.shortfall)}`,
         };
         return (
           <Box key={cycle.cycleId} bg="canvas.50" borderRadius="20px" p={4}>

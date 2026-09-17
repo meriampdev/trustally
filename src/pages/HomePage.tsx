@@ -15,13 +15,13 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react";
-import { useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { DateRangeModal } from "../components/DateRangeModal";
 import { MetricCard } from "../components/MetricCard";
 import { PaymentDetailsModal } from "../components/PaymentDetailsModal";
 import { SectionCard } from "../components/SectionCard";
-import { SetAsideSummary } from "../components/SetAsideSummary";
+import { SetAsideSummary, StashBreakdown } from "../components/SetAsideSummary";
 import { useCurrentLocation } from "../lib/location";
 import {
   fetchCashMovements,
@@ -289,9 +289,6 @@ export default function HomePage() {
   const metricsPuresafeCapital = isLatestMetrics
     ? recentSetAside?.puresafeCapital ?? null
     : rangeSetAside?.summary.puresafeCapital ?? null;
-  const metricsElectricityShare = isLatestMetrics
-    ? recentSetAside?.electricityShare ?? 0
-    : rangeSetAside?.summary.electricityShare ?? 0;
   const metricsMiscCapital = isLatestMetrics
     ? recentSetAside?.miscCapital ?? null
     : rangeSetAside?.summary.miscCapital ?? null;
@@ -301,12 +298,6 @@ export default function HomePage() {
   const metricsGrossProfit = metricsTotalCapital == null
     ? null
     : metricsGrossSales - metricsTotalCapital;
-  const metricsTotalSetAside = isLatestMetrics
-    ? recentSetAside?.totalSetAside ?? null
-    : rangeSetAside?.summary.totalSetAside ?? null;
-  const metricsRemainingEarnings = isLatestMetrics
-    ? recentSetAside?.remainingEarnings ?? null
-    : rangeSetAside?.summary.remainingEarnings ?? null;
   const recentCycleRoute = dashboard.recentResult?.cycleId ? `/history/${dashboard.recentResult.cycleId}` : "/history";
   const latestUnaccounted = recentHonesty && recentCyclePayments
     ? Math.max(recentHonesty.summary.currentlyDueAmount - recentCyclePayments.summary.totalPayments, 0)
@@ -319,8 +310,8 @@ export default function HomePage() {
   };
 
   return (
-    <Stack spacing={5}>
-      <SectionCard eyebrow="Current cycle" title={dashboard.locationName ?? "Your box"}>
+    <Stack spacing={5} width="100%" minWidth={0}>
+      <SectionCard eyebrow="Current cycle" title={dashboard.locationName ?? "Your box"} minW={0}>
         <Box
           as="button"
           width="100%"
@@ -335,7 +326,7 @@ export default function HomePage() {
           px={{ base: 2, md: 3 }}
           py={2}
         >
-          <SimpleGrid columns={{ base: 2, md: 4 }}>
+          <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }}>
             <CompactCycleStat label="Last checked" value={formatDateTimeLabel(lastCheckedAt)} />
             <CompactCycleStat label="Running for" value={formatDurationFromNow(cycleStartedAt)} />
             <CompactCycleStat label="Last loaded" value={formatCount(lastLoadedQuantity)} />
@@ -345,27 +336,27 @@ export default function HomePage() {
             />
           </SimpleGrid>
         </Box>
-        <HStack mt={5} spacing={3} flexWrap="wrap">
-          <Button as={Link} to="/check-box">
+        <SwipeableButtonRow mt={5} ariaLabel="Dashboard actions">
+          <Button as={Link} to="/check-box" flexShrink={0}>
             Check box
           </Button>
-          <Button as={Link} to="/stock" variant="outline">
+          <Button as={Link} to="/stock" variant="outline" flexShrink={0}>
             + Add stock
           </Button>
-          <Button as={Link} to="/pay-later" variant="outline">
+          <Button as={Link} to="/pay-later" variant="outline" flexShrink={0}>
             Record pay-later
           </Button>
-          <Button as={Link} to="/payments" variant="outline">
+          <Button as={Link} to="/payments" variant="outline" flexShrink={0}>
             Record payment
           </Button>
-          <Button as={Link} to="/cash-movements" variant="outline">
+          <Button as={Link} to="/cash-movements" variant="outline" flexShrink={0}>
             Cash removed
           </Button>
-        </HStack>
+        </SwipeableButtonRow>
       </SectionCard>
 
       <SectionCard eyebrow="Cash status" title="Cash position and explained amounts">
-        <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4}>
+        <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={4}>
           <MetricCard
             label="Estimated in box"
             value={formatCurrency(estimatedPhysicalCash)}
@@ -401,7 +392,7 @@ export default function HomePage() {
         {recentCashFloat ? (
           <Box mt={5}>
             <Text fontWeight="900" mb={3}>Latest completed cash check</Text>
-            <SimpleGrid columns={{ base: 2, md: 5 }} spacing={4}>
+            <SimpleGrid columns={{ base: 1, sm: 2, md: 5 }} spacing={4}>
               <MetricCard label="Opening change float" value={recentCashFloat.openingChangeFloat == null ? "Unknown" : formatCurrency(recentCashFloat.openingChangeFloat)} hint="View completed cash check" onClick={() => showDetail("Opening change float", "Cash already in the box when the completed cycle began.", [["Opening", recentCashFloat.openingChangeFloat == null ? "Unknown" : formatCurrency(recentCashFloat.openingChangeFloat)], ["Source", recentCashFloat.openingChangeFloatSource]])} />
               <MetricCard label="Cash counted" value={formatCurrency(recentCashFloat.cashCountedBeforeWithdrawal)} hint="View completed cash check" onClick={() => showDetail("Cash counted", "Physical cash counted before the cycle withdrawal.", [["Counted", formatCurrency(recentCashFloat.cashCountedBeforeWithdrawal)], ["Left for Change", formatCurrency(recentCashFloat.closingChangeFloat)], ["Withdrawn", formatCurrency(recentCashFloat.cashWithdrawn)]])} />
               <MetricCard label="Cash generated" value={recentCashFloat.cashGenerated == null ? "Cannot be determined" : formatCurrency(recentCashFloat.cashGenerated)} hint="View calculation" onClick={() => showDetail("Customer cash generated", "Counted cash plus interim withdrawals, less opening float and tracked non-sales additions.", [["Cash counted", formatCurrency(recentCashFloat.cashCountedBeforeWithdrawal)], ["Interim withdrawals", formatCurrency(recentCashFloat.interimOwnerWithdrawals)], ["Opening float", formatCurrency(recentCashFloat.openingChangeFloat)], ["Generated", recentCashFloat.cashGenerated == null ? "Cannot be determined" : formatCurrency(recentCashFloat.cashGenerated)]])} />
@@ -412,12 +403,13 @@ export default function HomePage() {
         ) : null}
       </SectionCard>
 
-      <SectionCard eyebrow="Metrics" title={metricsTitle}>
-        <HStack spacing={2} flexWrap="wrap" mb={4}>
+      <SectionCard eyebrow="Metrics" title={metricsTitle} minW={0}>
+        <SwipeableButtonRow mb={4} ariaLabel="Dashboard reporting ranges">
           {metricsRangeOptions.map((option) => (
             <Button
               key={option.value}
               size="sm"
+              flexShrink={0}
               variant={metricsRange === option.value ? "solid" : "outline"}
               onClick={() => {
                 if (option.value === "custom") {
@@ -432,12 +424,12 @@ export default function HomePage() {
                 : option.label}
             </Button>
           ))}
-        </HStack>
+        </SwipeableButtonRow>
         {isMetricsLoading ? <Spinner color="brand.400" /> : metricsError ? (
           <Text color="caution.600">{metricsError}</Text>
         ) : metricsAvailable ? (
           <Stack spacing={3}>
-          <SimpleGrid columns={{ base: 2, md: 3, xl: 5 }} spacing={4}>
+          <SimpleGrid columns={{ base: 1, sm: 2, md: 3, xl: 5 }} spacing={4}>
             <MetricCard
               label="Honesty rate"
               value={formatPercent(metricsHonestyRate)}
@@ -480,7 +472,7 @@ export default function HomePage() {
           </SimpleGrid>
           <Box pt={2}>
             <Text fontWeight="900" mb={3}>Sales</Text>
-            <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4}>
+            <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={4}>
               <MetricCard
                 label="Gross sales"
                 value={formatCurrency(metricsGrossSales)}
@@ -490,37 +482,55 @@ export default function HomePage() {
               <MetricCard label="Total Capital" value={metricsTotalCapital == null ? "Unable to calculate" : formatCurrency(metricsTotalCapital)} hint="View calculation" onClick={() => showDetail("Total capital", "Replacement capital for Puresafe plus all other depleted products.", [["Puresafe", metricsPuresafeCapital == null ? "Unable to calculate" : formatCurrency(metricsPuresafeCapital)], ["Other products", metricsMiscCapital == null ? "Unable to calculate" : formatCurrency(metricsMiscCapital)], ["Total", metricsTotalCapital == null ? "Unable to calculate" : formatCurrency(metricsTotalCapital)]])} />
               <MetricCard label="Gross Profit" value={metricsGrossProfit == null ? "Unable to calculate" : formatCurrency(metricsGrossProfit)} hint="View calculation" onClick={() => showDetail("Gross profit", "Actual recorded sales less product replacement capital.", [["Gross sales", formatCurrency(metricsGrossSales)], ["Total capital", metricsTotalCapital == null ? "Unable to calculate" : formatCurrency(metricsTotalCapital)], ["Gross profit", metricsGrossProfit == null ? "Unable to calculate" : formatCurrency(metricsGrossProfit)]])} />
             </SimpleGrid>
-            {isLatestMetrics && recentSetAside ? (
-              <Box mt={4}><SetAsideSummary value={recentSetAside} onMetricClick={(metric) => {
-                const detailMap: Record<string, DashboardDetail> = {
-                  cashAvailableAfterChangeFloat: { title: "Cash after change float", description: "Cash available after preserving the closing change float.", values: [["Available cash", formatCurrency(recentSetAside.cashAvailableAfterChangeFloat)]] },
-                  availableOnlinePayments: { title: "Available online payments", description: "Online payments recorded for this cycle.", values: [["Online payments", formatCurrency(recentSetAside.availableOnlinePayments)]] },
-                  totalAvailable: { title: "Total available", description: "Cash after change float plus available online payments.", values: [["Cash", formatCurrency(recentSetAside.cashAvailableAfterChangeFloat)], ["Online", formatCurrency(recentSetAside.availableOnlinePayments)], ["Total", formatCurrency(recentSetAside.totalAvailable)]] },
-                  puresafeCapital: { title: "Puresafe capital", description: "Replacement cost reserved for depleted Puresafe bottles.", values: [["Bottles", String(recentSetAside.puresafeBottlesToReplace)], ["Cost per bottle", formatCurrency(recentSetAside.puresafeCostPerUnit)], ["Capital", recentSetAside.puresafeCapital == null ? "Unable to calculate" : formatCurrency(recentSetAside.puresafeCapital)]] },
-                  electricityShare: { title: "Electricity share", description: "Cycle duration multiplied by the saved hourly electricity rate.", values: [["Hours", recentSetAside.cycleHours.toFixed(2)], ["Rate", formatCurrency(recentSetAside.electricityCostPerHour)], ["Share", formatCurrency(recentSetAside.electricityShare)]] },
-                  miscCapital: { title: "Other-products capital", description: "Replacement capital for depleted non-Puresafe products.", values: [["Capital", recentSetAside.miscCapital == null ? "Unable to calculate" : formatCurrency(recentSetAside.miscCapital)]] },
-                  totalSetAside: { title: "Total set aside", description: "All product capital and electricity reserves.", values: [["Total", recentSetAside.totalSetAside == null ? "Unable to calculate" : formatCurrency(recentSetAside.totalSetAside)]] },
-                  remainingEarnings: { title: "To Stash", description: "Net earnings available after change float and all reserves.", values: [["Remaining", recentSetAside.remainingEarnings == null ? "Unable to calculate" : formatCurrency(recentSetAside.remainingEarnings)]] },
-                  shortfall: { title: "Shortfall", description: "How far available funds fall below required reserves.", values: [["Shortfall", recentSetAside.shortfall == null ? "Unable to calculate" : formatCurrency(recentSetAside.shortfall)]] },
-                };
-                const selected = detailMap[metric];
-                if (selected) setDashboardDetail({ ...selected, route: metricsDetailRoute, routeLabel: "View full cycle" });
-              }} /></Box>
-            ) : !isLatestMetrics && rangeSetAside ? (
-              <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4} mt={4}>
-                <MetricCard label="Puresafe Capital" value={rangeSetAside.summary.puresafeCapital == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.puresafeCapital)} hint="View by cycle in reports" onClick={() => showDetail("Puresafe capital", "Replacement capital reserved for Puresafe bottles in this period.", [["Capital", rangeSetAside.summary.puresafeCapital == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.puresafeCapital)]])} />
-                <MetricCard label="Electricity Share" value={formatCurrency(rangeSetAside.summary.electricityShare)} hint="View by cycle in reports" onClick={() => showDetail("Electricity share", "Cycle duration multiplied by each cycle's saved hourly rate.", [["Electricity share", formatCurrency(rangeSetAside.summary.electricityShare)]])} />
-                <MetricCard label="Other Products Capital" value={rangeSetAside.summary.miscCapital == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.miscCapital)} hint="View by cycle in reports" onClick={() => showDetail("Other-products capital", "Replacement cost for depleted non-Puresafe products.", [["Capital", rangeSetAside.summary.miscCapital == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.miscCapital)]])} />
-                <MetricCard label="Total Set Aside" value={rangeSetAside.summary.totalSetAside == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.totalSetAside)} hint="View by cycle in reports" onClick={() => showDetail("Total set aside", "Product capital plus electricity reserve.", [["Total", rangeSetAside.summary.totalSetAside == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.totalSetAside)]])} />
-                <MetricCard label="To Stash" value={rangeSetAside.summary.remainingEarnings == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.remainingEarnings)} hint="View by cycle in reports" onClick={() => showDetail("To Stash", "Earnings remaining after change float and reserves.", [["Remaining", rangeSetAside.summary.remainingEarnings == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.remainingEarnings)]])} />
-                <MetricCard label="Shortfall" value={rangeSetAside.summary.shortfall == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.shortfall)} hint="View by cycle in reports" onClick={() => showDetail("Set-aside shortfall", "The amount by which available funds fall short of required reserves.", [["Shortfall", rangeSetAside.summary.shortfall == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.shortfall)]])} />
-              </SimpleGrid>
-            ) : null}
           </Box>
           {metricsUnclassified > 0 ? <Text color="canvas.700" mt={3}>{metricsUnclassified} historical record{metricsUnclassified === 1 ? " is" : "s are"} still unclassified.</Text> : null}
           </Stack>
         ) : (
           <Text color="canvas.700">No completed cycles in this period.</Text>
+        )}
+      </SectionCard>
+
+      <SectionCard eyebrow="Set Aside" title={`${metricsTitle} reserves`}>
+        {isMetricsLoading ? <Spinner color="brand.400" /> : metricsError ? (
+          <Text color="caution.600">{metricsError}</Text>
+        ) : isLatestMetrics && recentSetAside ? (
+          <SetAsideSummary value={recentSetAside} onMetricClick={(metric) => {
+            const detailMap: Record<string, DashboardDetail> = {
+              cashAvailableAfterChangeFloat: { title: "Cash available for reserves", description: "Cash available for set aside after preserving the closing change float.", values: [["Available cash", formatCurrency(recentSetAside.cashAvailableAfterChangeFloat)]] },
+              puresafeCapital: { title: "Puresafe capital", description: "Replacement cost reserved for depleted Puresafe bottles.", values: [["Bottles", String(recentSetAside.puresafeBottlesToReplace)], ["Cost per bottle", formatCurrency(recentSetAside.puresafeCostPerUnit)], ["Capital", recentSetAside.puresafeCapital == null ? "Unable to calculate" : formatCurrency(recentSetAside.puresafeCapital)]] },
+              electricityShare: { title: "Electricity share", description: "Cycle duration multiplied by the saved hourly electricity rate.", values: [["Hours", recentSetAside.cycleHours.toFixed(2)], ["Rate", formatCurrency(recentSetAside.electricityCostPerHour)], ["Share", formatCurrency(recentSetAside.electricityShare)]] },
+              miscCapital: { title: "Other-products capital", description: "Replacement capital for depleted non-Puresafe products.", values: [["Capital", recentSetAside.miscCapital == null ? "Unable to calculate" : formatCurrency(recentSetAside.miscCapital)]] },
+              totalSetAside: { title: "Total set aside", description: "All product capital and electricity reserves.", values: [["Total", recentSetAside.totalSetAside == null ? "Unable to calculate" : formatCurrency(recentSetAside.totalSetAside)]] },
+              remainingEarnings: { title: "To Stash", description: "Untouched online payments plus cash left after all reserves.", values: [["Online payments", formatCurrency(recentSetAside.availableOnlinePayments)], ["Cash after reserves", recentSetAside.totalSetAside == null ? "Unable to calculate" : formatCurrency(Math.max(recentSetAside.cashAvailableAfterChangeFloat - recentSetAside.totalSetAside, 0))], ["To Stash", recentSetAside.remainingEarnings == null ? "Unable to calculate" : formatCurrency(recentSetAside.remainingEarnings)]] },
+              shortfall: { title: "Cash shortfall", description: "How far available cash falls below the required reserves. Online payments are not used to cover it.", values: [["Cash shortfall", recentSetAside.shortfall == null ? "Unable to calculate" : formatCurrency(recentSetAside.shortfall)]] },
+            };
+            const selected = detailMap[metric];
+            if (selected) setDashboardDetail({ ...selected, route: metricsDetailRoute, routeLabel: "View full cycle" });
+          }} />
+        ) : !isLatestMetrics && rangeSetAside ? (
+          <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={4}>
+            <MetricCard label="Puresafe Capital" value={rangeSetAside.summary.puresafeCapital == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.puresafeCapital)} hint="View by cycle in reports" onClick={() => showDetail("Puresafe capital", "Replacement capital reserved for Puresafe bottles in this period.", [["Capital", rangeSetAside.summary.puresafeCapital == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.puresafeCapital)]])} />
+            <MetricCard label="Electricity Share" value={formatCurrency(rangeSetAside.summary.electricityShare)} hint="View by cycle in reports" onClick={() => showDetail("Electricity share", "Cycle duration multiplied by each cycle's saved hourly rate.", [["Electricity share", formatCurrency(rangeSetAside.summary.electricityShare)]])} />
+            <MetricCard label="Other Products Capital" value={rangeSetAside.summary.miscCapital == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.miscCapital)} hint="View by cycle in reports" onClick={() => showDetail("Other-products capital", "Replacement cost for depleted non-Puresafe products.", [["Capital", rangeSetAside.summary.miscCapital == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.miscCapital)]])} />
+            <MetricCard label="Total Set Aside" value={rangeSetAside.summary.totalSetAside == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.totalSetAside)} hint="View by cycle in reports" onClick={() => showDetail("Total set aside", "Product capital plus electricity reserve.", [["Total", rangeSetAside.summary.totalSetAside == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.totalSetAside)]])} />
+            <MetricCard label="Cash shortfall" value={rangeSetAside.summary.shortfall == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.shortfall)} hint="View by cycle in reports" onClick={() => showDetail("Cash shortfall", "Required reserves not covered by available cash. Online payments remain untouched.", [["Cash shortfall", rangeSetAside.summary.shortfall == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.shortfall)]])} />
+            <MetricCard
+              label="To Stash"
+              value={rangeSetAside.summary.remainingEarnings == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.remainingEarnings)}
+              hint="Online plus cash left after reserves"
+              accent={(
+                <StashBreakdown
+                  availableOnlinePayments={rangeSetAside.summary.availableOnlinePayments}
+                  cashAfterSetAside={rangeSetAside.summary.remainingEarnings == null
+                    ? null
+                    : Math.max(rangeSetAside.summary.remainingEarnings - rangeSetAside.summary.availableOnlinePayments, 0)}
+                />
+              )}
+              onClick={() => showDetail("To Stash", "Untouched online payments plus cash left after reserves.", [["Online payments", formatCurrency(rangeSetAside.summary.availableOnlinePayments)], ["Cash after reserves", rangeSetAside.summary.remainingEarnings == null ? "Unable to calculate" : formatCurrency(Math.max(rangeSetAside.summary.remainingEarnings - rangeSetAside.summary.availableOnlinePayments, 0))], ["To Stash", rangeSetAside.summary.remainingEarnings == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.remainingEarnings)]])}
+            />
+          </SimpleGrid>
+        ) : (
+          <Text color="canvas.700">No set-aside calculation is available for this period.</Text>
         )}
       </SectionCard>
 
@@ -578,83 +588,31 @@ export default function HomePage() {
         )}
       </SectionCard>
 
-      <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={5}>
-        <SectionCard eyebrow="Outstanding" title="Open balances">
-          {outstandingBalances.length ? (
-            <Stack spacing={3}>
-              {outstandingBalances.slice(0, 3).map((balance) => (
-                <Box key={balance.id} as="button" width="100%" textAlign="left" cursor="pointer" borderRadius="24px" bg="canvas.50" p={4} _hover={{ bg: "whiteAlpha.100" }} onClick={() => showDetail(balance.customerLabel?.trim() || balance.cycleLabel, "Open pay-later balance and its saved context.", [["Original amount", formatCurrency(balance.originalAmount)], ["Remaining", formatCurrency(balance.remainingAmount)], ["Status", balance.status], ["Items", balance.itemsSummary?.trim() || "No item summary"]], "/payments", "View payment balances")}>
-                  <Text fontWeight="800">
-                    {balance.customerLabel?.trim() || balance.cycleLabel}
-                  </Text>
-                  <Text color="canvas.700" mt={1}>
-                    Remaining {formatCurrency(balance.remainingAmount)}
-                    {balance.dueDate ? ` • Due ${formatDateTimeLabel(balance.dueDate)}` : ""}
-                  </Text>
-                  {balance.itemsSummary?.trim() ? (
-                    <Text color="canvas.700" mt={1}>
-                      Items: {balance.itemsSummary}
-                    </Text>
-                  ) : null}
-                </Box>
-              ))}
-              <Button as={Link} to="/payments" variant="outline">
-                View outstanding payments
-              </Button>
-            </Stack>
-          ) : (
-            <Text color="canvas.700">No open balances right now.</Text>
-          )}
-        </SectionCard>
-
-        <SectionCard eyebrow="Restock soon" title="Alerts">
-          {dashboard.alerts.length ? (
-            <Stack spacing={3}>
-              {dashboard.alerts.map((item) => (
-                <Box key={item.productId} as="button" width="100%" textAlign="left" cursor="pointer" borderRadius="24px" bg="canvas.50" p={4} _hover={{ bg: "whiteAlpha.100" }} onClick={() => showDetail(item.productName, "Low-stock estimate based on recent consumption.", [["Estimated days remaining", item.estimatedDaysRemaining == null ? "Not enough history" : String(item.estimatedDaysRemaining)], ["Suggested to bring", String(item.suggestedBring ?? 0)]], "/products", "View product") }>
-                  <Text fontWeight="800">{item.productName}</Text>
-                  <Text color="canvas.700" mt={1}>
-                    {item.estimatedDaysRemaining == null
-                      ? "Not enough history yet"
-                      : `${item.estimatedDaysRemaining} day${item.estimatedDaysRemaining === 1 ? "" : "s"} left at the current pace`}
-                  </Text>
-                  <Text mt={2} fontWeight="800" color="honesty.500">
-                    Bring about {item.suggestedBring ?? 0}
-                  </Text>
-                </Box>
-              ))}
-            </Stack>
-          ) : (
-            <Text color="canvas.700">
-              No urgent alerts right now. Trustally will flag products that are running low.
-            </Text>
-          )}
-        </SectionCard>
-      </SimpleGrid>
-
-      <SectionCard eyebrow="What should I bring?" title="Restock suggestions">
-        {dashboard.whatToBring.length ? (
+      <SectionCard eyebrow="Outstanding" title="Open balances">
+        {outstandingBalances.length ? (
           <Stack spacing={3}>
-            {dashboard.whatToBring.map((item) => (
-              <Box key={item.productId} as="button" width="100%" textAlign="left" cursor="pointer" borderRadius="24px" bg="canvas.50" p={4} _hover={{ bg: "whiteAlpha.100" }} onClick={() => showDetail(item.productName, "Restock suggestion based on average daily consumption and estimated stock.", [["Average per day", item.averageDailyConsumption == null ? "Not enough history" : item.averageDailyConsumption.toFixed(1)], ["Estimated remaining", String(item.estimatedRemaining ?? 0)], ["Suggested to bring", String(item.suggestedBring ?? 0)], ["Status", item.status]], "/reports", "View product performance") }>
-                <Text fontWeight="800">{item.productName}</Text>
+            {outstandingBalances.slice(0, 3).map((balance) => (
+              <Box key={balance.id} as="button" width="100%" textAlign="left" cursor="pointer" borderRadius="24px" bg="canvas.50" p={4} _hover={{ bg: "whiteAlpha.100" }} onClick={() => showDetail(balance.customerLabel?.trim() || balance.cycleLabel, "Open pay-later balance and its saved context.", [["Original amount", formatCurrency(balance.originalAmount)], ["Remaining", formatCurrency(balance.remainingAmount)], ["Status", balance.status], ["Items", balance.itemsSummary?.trim() || "No item summary"]], "/payments", "View payment balances")}>
+                <Text fontWeight="800">
+                  {balance.customerLabel?.trim() || balance.cycleLabel}
+                </Text>
                 <Text color="canvas.700" mt={1}>
-                  {item.averageDailyConsumption == null
-                    ? "Not enough history yet"
-                    : `Average ${item.averageDailyConsumption.toFixed(1)}/day • Estimated remaining ${item.estimatedRemaining ?? 0}`}
+                  Remaining {formatCurrency(balance.remainingAmount)}
+                  {balance.dueDate ? ` • Due ${formatDateTimeLabel(balance.dueDate)}` : ""}
                 </Text>
-                <Text mt={2} fontWeight="800" color="honesty.500">
-                  {item.suggestedBring && item.suggestedBring > 0
-                    ? `Bring about ${item.suggestedBring}`
-                    : item.status}
-                </Text>
+                {balance.itemsSummary?.trim() ? (
+                  <Text color="canvas.700" mt={1}>
+                    Items: {balance.itemsSummary}
+                  </Text>
+                ) : null}
               </Box>
             ))}
+            <Button as={Link} to="/payments" variant="outline" alignSelf="start">
+              View outstanding payments
+            </Button>
           </Stack>
         ) : (
-          <Text color="canvas.700">
-            Complete a few box cycles and Trustally will suggest what to bring.
-          </Text>
+          <Text color="canvas.700">No open balances right now.</Text>
         )}
       </SectionCard>
 
@@ -730,6 +688,42 @@ function CompactCycleStat({ label, value }: { label: string; value: string }) {
       <Text mt={1} fontSize={{ base: "md", md: "lg" }} fontWeight="900" color="canvas.900" noOfLines={1}>
         {value}
       </Text>
+    </Box>
+  );
+}
+
+function SwipeableButtonRow({
+  children,
+  ariaLabel,
+  mt,
+  mb,
+}: {
+  children: ReactNode;
+  ariaLabel: string;
+  mt?: number;
+  mb?: number;
+}) {
+  return (
+    <Box
+      role="region"
+      aria-label={ariaLabel}
+      mt={mt}
+      mb={mb}
+      width="100%"
+      maxWidth="100%"
+      minWidth={0}
+      overflowX="auto"
+      overflowY="hidden"
+      overscrollBehaviorX="contain"
+      sx={{
+        WebkitOverflowScrolling: "touch",
+        scrollbarWidth: "none",
+        "&::-webkit-scrollbar": { display: "none" },
+      }}
+    >
+      <HStack spacing={2} display="inline-flex" minWidth="max-content" pr={1}>
+        {children}
+      </HStack>
     </Box>
   );
 }
