@@ -23,7 +23,7 @@ import { MetricCard } from "../components/MetricCard";
 import { PaymentDetailsModal } from "../components/PaymentDetailsModal";
 import { CycleHonestyPanel } from "../components/CycleHonestyPanel";
 import { SectionCard } from "../components/SectionCard";
-import { SetAsideSummary, StashBreakdown } from "../components/SetAsideSummary";
+import { SetAsideSummary } from "../components/SetAsideSummary";
 import { correctCompletedBoxCycle, fetchCycleCashFloatDetail, fetchCycleDetail, fetchCycleDisclosureAndCollection, fetchCyclePaymentDetail, fetchCycleSetAside, updateCycleChangeFloat } from "../lib/api";
 import {
   formatCurrency,
@@ -232,25 +232,8 @@ export default function CycleDetailPage() {
       <SectionCard eyebrow="Sales and profit" title="Actual recorded money">
         <SimpleGrid columns={{ base: 2, xl: 4 }} spacing={4}>
           <MetricCard label="Gross sales" value={formatCurrency(payments.summary.totalPayments)} />
-          <MetricCard label="Puresafe Capital" value={setAside.missingPuresafeCost ? "Unable to calculate" : formatCurrency(setAside.puresafeCapital)} />
           <MetricCard label="Gross Profit" value={grossProfit == null ? "Unable to calculate" : formatCurrency(grossProfit)} hint="Gross sales less all product capital" />
-          <MetricCard label="Electricity Share" value={formatCurrency(setAside.electricityShare)} />
-          <MetricCard label="Other Products Capital" value={setAside.miscCapital == null ? "Unable to calculate" : formatCurrency(setAside.miscCapital)} hint="Replacement cost for every depleted non-Puresafe product" />
           <MetricCard label="Total Capital" value={totalCapital == null ? "Unable to calculate" : formatCurrency(totalCapital)} />
-          <MetricCard label="Total Set Aside" value={setAside.totalSetAside == null ? "Unable to calculate" : formatCurrency(setAside.totalSetAside)} />
-          <MetricCard
-            label="To Stash"
-            value={setAside.remainingEarnings == null ? "Unable to calculate" : formatCurrency(setAside.remainingEarnings)}
-            hint="Untouched online payments plus cash left after reserves"
-            accent={(
-              <StashBreakdown
-                availableOnlinePayments={setAside.availableOnlinePayments}
-                cashAfterSetAside={setAside.totalSetAside == null
-                  ? null
-                  : Math.max(setAside.cashAvailableAfterChangeFloat - setAside.totalSetAside, 0)}
-              />
-            )}
-          />
         </SimpleGrid>
         <Text color="canvas.700" mt={3}>Started {formatDateTimeLabel(detail.startedAt)} · Completed {formatDateTimeLabel(detail.completedAt)}</Text>
       </SectionCard>
