@@ -572,6 +572,27 @@ export interface CycleSetAside {
   remainingEarnings: number | null;
   shortfall: number | null;
   settingsSnapshottedAt: string | null;
+  actualSetAside?: {
+    id: string;
+    puresafeCapital: number;
+    otherProductsCapital: number;
+    electricityShare: number;
+    toStashCash: number;
+    onlineToStash: number;
+    toStashTotal: number;
+    physicalCashTotal: number;
+    note: string | null;
+    recordedAt: string;
+    updatedAt: string;
+  } | null;
+  otherProductsReserve?: {
+    trackingStartedAt: string | null;
+    actualSetAside: number | null;
+    usedForRestocks: number | null;
+    netSetAside: number | null;
+    openingBalance: number | null;
+    closingBalance: number | null;
+  };
 }
 
 export interface ReportSetAside {
@@ -587,8 +608,222 @@ export interface ReportSetAside {
     shortfall: number | null;
     missingPuresafeCostCycles: number;
     missingMiscellaneousCostCycles?: number;
+    actualPuresafeCapital?: number | null;
+    actualOtherProductsCapital?: number | null;
+    actualElectricityShare?: number | null;
+    actualToStashCash?: number | null;
+    actualPhysicalTotal?: number | null;
+    onlineToStash?: number;
+    usedForOtherProductRestocks?: number | null;
+    netOtherProductsSetAside?: number | null;
+    openingOtherProductsReserve?: number | null;
+    closingOtherProductsReserve?: number | null;
+    reserveTrackingStartedAt?: string | null;
+    actualRecordedCycles?: number;
+    actualUnrecordedCycles?: number;
   };
   cycles: CycleSetAside[];
+}
+
+export interface ActualSetAsideInput {
+  cycleId: string;
+  puresafeCapital: string;
+  otherProductsCapital: string;
+  electricityShare: string;
+  toStashCash: string;
+  note?: string;
+}
+
+export type ExpenseCategory =
+  | "Setup"
+  | "Equipment"
+  | "Repairs"
+  | "Supplies"
+  | "Transport"
+  | "Fees"
+  | "Inventory"
+  | "Other";
+
+export interface Expense {
+  id: string;
+  locationId: string;
+  incurredOn: string;
+  category: ExpenseCategory;
+  description: string | null;
+  amount: number;
+  expenseType?: "OPERATING" | "RESTOCK";
+  productId?: string | null;
+  restockId?: string | null;
+  affectsInventoryCost?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InventoryRestockInput {
+  productId: string;
+  quantity: number;
+  occurredAt: string;
+  totalAmountPaid: string;
+  unitCostOverride?: string;
+  sellingPrice?: string;
+  supplier?: string;
+  receiptReference?: string;
+  notes?: string;
+  puresafeDetail?: Record<string, unknown>;
+  idempotencyKey: string;
+}
+
+export interface InventoryRestock {
+  id: string;
+  stockAdditionId: string;
+  cycleId: string;
+  cycleNumber: number;
+  productId: string;
+  productName: string;
+  productCategory: string;
+  occurredAt: string;
+  quantity: number;
+  previousQuantity: number | null;
+  newQuantity: number | null;
+  previousAverageCost: number | null;
+  unitCost: number;
+  totalAmountPaid: number;
+  newWeightedAverageCost: number | null;
+  supplier: string | null;
+  receiptReference: string | null;
+  notes: string | null;
+  puresafeDetail: Record<string, unknown>;
+  costQuality: "VERIFIED" | "ESTIMATED" | "MISSING";
+  createdBy: string;
+  editable: boolean;
+}
+
+export interface PuresafeCostSettings {
+  productId: string;
+  bottlePackUnits: number;
+  bottlePackCost: number;
+  defaultPackCount: number;
+  waterContainerCost: number;
+  defaultBottlesPerContainer: number;
+  capSealPerUnit: number;
+  stickerPerUnit: number;
+  printingPerUnit: number;
+  otherPackagingPerUnit: number;
+}
+
+export interface BusinessProductPerformance {
+  productId: string;
+  productName: string;
+  category: string;
+  currentStock: number;
+  weightedAverageUnitCost: number | null;
+  inventoryValue: number | null;
+  openingCapital: number;
+  totalRestockCapital: number;
+  capitalInvested: number;
+  capitalRecovered: number;
+  capitalRemaining: number | null;
+  recoveryPercentage: number | null;
+  revenue: number;
+  grossProfit: number;
+  capitalRecoveredAt: string | null;
+  cashBreakEvenAt: string | null;
+  firstRestockAt: string | null;
+  lastRestockAt: string | null;
+  dataQuality: "VERIFIED" | "ESTIMATED" | "MISSING";
+  periodRestocked: number;
+  periodOpeningStock: number;
+  periodClosingStock: number;
+  periodRestockCapital: number;
+  periodUnitsSold: number;
+  periodRevenue: number;
+  periodCapitalRecovered: number | null;
+  periodGrossProfit: number | null;
+}
+
+export interface BusinessSaleRecord {
+  id: string;
+  soldAt: string;
+  cycleId: string;
+  cycleNumber: number;
+  productId: string;
+  productName: string;
+  productCategory: string;
+  quantitySold: number;
+  sellingPrice: number;
+  revenue: number;
+  unitCostUsed: number | null;
+  capitalRecovered: number | null;
+  grossProfit: number | null;
+  grossMargin: number | null;
+  paymentMethod: PaymentMethod | null;
+  costQuality: "VERIFIED" | "ESTIMATED" | "MISSING";
+}
+
+export interface BusinessCycleSummary {
+  cycleId: string;
+  cycleNumber: number;
+  startedAt: string;
+  completedAt: string;
+  expectedSales: number;
+  actualCollections: number;
+  cashCollected: number;
+  digitalPayments: number;
+  changeFloat: number | null;
+  closingChangeFloat: number | null;
+  difference: number;
+  capitalRecovered: number | null;
+  grossProfit: number | null;
+  otherExpenses: number;
+  netProfit: number | null;
+}
+
+export interface BusinessStockMovement {
+  id: string;
+  occurredAt: string;
+  productId: string;
+  productName: string;
+  productCategory: string;
+  movementType: "OPENING" | "RESTOCK" | "SALE" | "ADJUSTMENT" | "DAMAGED" | "MISSING" | "COACH_DEDUCTION" | "OTHER";
+  quantityIn: number;
+  quantityOut: number;
+  runningStockBalance: number | null;
+  unitCost: number | null;
+  inventoryValueChange: number | null;
+  reference: string | null;
+  notes: string | null;
+  dataQuality: "VERIFIED" | "ESTIMATED" | "MISSING";
+}
+
+export interface BusinessAccountingReport {
+  summary: {
+    revenue: number;
+    capitalInvested: number;
+    capitalRecovered: number | null;
+    capitalStillInStock: number | null;
+    grossProfit: number | null;
+    operatingExpenses: number;
+    restockCount: number;
+    unitsSold: number;
+    inventoryValue: number | null;
+    missingCostSales: number;
+  };
+  products: BusinessProductPerformance[];
+  sales: BusinessSaleRecord[];
+  restocks: InventoryRestock[];
+  expenses: Expense[];
+  cycles: BusinessCycleSummary[];
+  movements: BusinessStockMovement[];
+  trend: Array<{ label: string; revenue: number; grossProfit: number | null; capitalInvested: number; capitalRecovered: number | null }>;
+}
+
+export interface ExpenseInput {
+  id?: string | null;
+  locationId: string;
+  incurredOn: string;
+  category: ExpenseCategory;
+  description?: string | null;
+  amount: string;
 }
 
 export interface ReportCashFloatDetail {

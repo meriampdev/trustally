@@ -20,6 +20,8 @@ const SettingsPage = lazy(() => import("../pages/SettingsPage"));
 const PaymentsPage = lazy(() => import("../pages/PaymentsPage"));
 const CashMovementsPage = lazy(() => import("../pages/CashMovementsPage"));
 const RecordPayLaterPage = lazy(() => import("../pages/RecordPayLaterPage"));
+const ExpensesPage = lazy(() => import("../pages/ExpensesPage"));
+const BusinessReportsPage = lazy(() => import("../pages/BusinessReportsPage"));
 
 function ProtectedPage({ children }: { children: JSX.Element }) {
   const { user } = useAuth();
@@ -56,11 +58,13 @@ export default function App() {
         <Route path="/history/:cycleId" element={<ProtectedPage><CycleDetailPage /></ProtectedPage>} />
         <Route path="/check-box" element={<ProtectedPage><CheckBoxPage /></ProtectedPage>} />
         <Route path="/reports" element={<ProtectedPage><ReportsPage /></ProtectedPage>} />
+        <Route path="/reports/business" element={<ProtectedPage><BusinessReportsPage /></ProtectedPage>} />
         <Route path="/more" element={<ProtectedPage><MorePage /></ProtectedPage>} />
         <Route path="/products" element={<ProtectedPage><ProductsPage /></ProtectedPage>} />
         <Route path="/payments" element={<ProtectedPage><PaymentsPage /></ProtectedPage>} />
         <Route path="/pay-later" element={<ProtectedPage><RecordPayLaterPage /></ProtectedPage>} />
         <Route path="/cash-movements" element={<ProtectedPage><CashMovementsPage /></ProtectedPage>} />
+        <Route path="/expenses" element={<ProtectedPage><ExpensesPage /></ProtectedPage>} />
         <Route path="/stock" element={<ProtectedPage><AddStockPage /></ProtectedPage>} />
         <Route path="/settings" element={<ProtectedPage><SettingsPage /></ProtectedPage>} />
         <Route path="*" element={<Navigate to={user ? "/" : "/login"} replace />} />

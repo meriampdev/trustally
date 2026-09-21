@@ -121,6 +121,10 @@ export function calculateReportSetAsideShareComparison(value: ReportSetAside): S
 }
 
 export function applyCashOnlyCycleSetAside(value: CycleSetAside): CycleSetAside {
+  // Once Actual is recorded, the server returns the target and shortfall
+  // snapshots stored with that cycle. Preserve them even if later corrections
+  // change another derived cash field.
+  if (value.actualSetAside) return value;
   const result = calculateCashOnlySetAside(value);
   return {
     ...value,

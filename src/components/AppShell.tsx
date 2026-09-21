@@ -38,11 +38,13 @@ const titles: Record<string, string> = {
   "/history": "Box history",
   "/check-box": "Check box",
   "/reports": "Reports",
+  "/reports/business": "Business reports",
   "/more": "More",
   "/products": "Products",
   "/payments": "Outstanding payments",
   "/pay-later": "Record pay-later",
   "/cash-movements": "Cash movements",
+  "/expenses": "Expenses & break-even",
   "/stock": "Add stock",
   "/settings": "Settings",
 };

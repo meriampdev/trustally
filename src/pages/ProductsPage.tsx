@@ -20,9 +20,9 @@ import {
 } from "@chakra-ui/react";
 import { useEffect, useMemo, useState } from "react";
 import { SectionCard } from "../components/SectionCard";
-import { fetchProducts, upsertProduct } from "../lib/api";
+import { fetchProducts, fetchPuresafeCostSettings, savePuresafeCostSettings, upsertProduct } from "../lib/api";
 import { formatCurrency } from "../lib/format";
-import { Product, ProductUpsertInput } from "../lib/types";
+import { Product, ProductUpsertInput, PuresafeCostSettings } from "../lib/types";
 
 const emptyForm: ProductUpsertInput = {
   name: "",
@@ -44,6 +44,7 @@ export default function ProductsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [puresafeForm, setPuresafeForm] = useState<PuresafeCostSettings | null>(null);
 
   useEffect(() => {
     void load();
@@ -131,6 +132,21 @@ export default function ProductsPage() {
     if (isSaving) return;
     setIsProductModalOpen(false);
     setForm(emptyForm);
+  }
+
+  async function openPuresafeSettings(product: Product) {
+    setIsSaving(true);
+    try { setPuresafeForm(await fetchPuresafeCostSettings(product.id)); }
+    catch (error) { toast({ title: "Could not load Puresafe costs", description: error instanceof Error ? error.message : "Please try again.", status: "error", position: "top" }); }
+    finally { setIsSaving(false); }
+  }
+
+  async function savePuresafe() {
+    if (!puresafeForm) return;
+    setIsSaving(true);
+    try { await savePuresafeCostSettings(puresafeForm); setPuresafeForm(null); toast({ title: "Puresafe costs updated", description: "New restocks will use these editable defaults.", status: "success", position: "top" }); }
+    catch (error) { toast({ title: "Could not save Puresafe costs", description: error instanceof Error ? error.message : "Please try again.", status: "error", position: "top" }); }
+    finally { setIsSaving(false); }
   }
 
   return (
@@ -268,6 +284,9 @@ export default function ProductsPage() {
                     <Button variant="outline" onClick={() => openProductModal(product)}>
                       Edit product
                     </Button>
+                    {product.displayName.toLowerCase().includes("puresafe") ? <Button variant="outline" onClick={() => void openPuresafeSettings(product)}>
+                      Puresafe costing
+                    </Button> : null}
                     <Button
                       variant="ghost"
                       onClick={() => void handleArchiveToggle(product)}
@@ -282,8 +301,31 @@ export default function ProductsPage() {
           </Stack>
         )}
       </SectionCard>
+
+      <Modal isOpen={puresafeForm !== null} onClose={() => !isSaving && setPuresafeForm(null)} isCentered size="xl" scrollBehavior="inside">
+        <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)"/><ModalContent bg="canvas.100" borderRadius="28px" mx={4}>
+          <ModalHeader>Puresafe cost settings</ModalHeader><ModalCloseButton isDisabled={isSaving}/><ModalBody>
+            <Text color="canvas.700">These defaults calculate bottle, water, and packaging cost for new Puresafe restocks. Historical sale costs remain unchanged.</Text>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mt={4}>
+              <NumberSetting label="Empty bottles per pack" field="bottlePackUnits" value={puresafeForm?.bottlePackUnits} onChange={setPuresafeForm}/>
+              <NumberSetting label="Bottle pack cost" field="bottlePackCost" value={puresafeForm?.bottlePackCost} onChange={setPuresafeForm}/>
+              <NumberSetting label="Default packs purchased" field="defaultPackCount" value={puresafeForm?.defaultPackCount} onChange={setPuresafeForm}/>
+              <NumberSetting label="Blue water container cost" field="waterContainerCost" value={puresafeForm?.waterContainerCost} onChange={setPuresafeForm}/>
+              <NumberSetting label="Default bottles filled per container" field="defaultBottlesPerContainer" value={puresafeForm?.defaultBottlesPerContainer} onChange={setPuresafeForm}/>
+              <NumberSetting label="Cap or seal per bottle" field="capSealPerUnit" value={puresafeForm?.capSealPerUnit} onChange={setPuresafeForm}/>
+              <NumberSetting label="Sticker per bottle" field="stickerPerUnit" value={puresafeForm?.stickerPerUnit} onChange={setPuresafeForm}/>
+              <NumberSetting label="Printing per bottle" field="printingPerUnit" value={puresafeForm?.printingPerUnit} onChange={setPuresafeForm}/>
+              <NumberSetting label="Other packaging per bottle" field="otherPackagingPerUnit" value={puresafeForm?.otherPackagingPerUnit} onChange={setPuresafeForm}/>
+            </SimpleGrid>
+          </ModalBody><ModalFooter gap={3}><Button variant="outline" onClick={() => setPuresafeForm(null)}>Cancel</Button><Button onClick={() => void savePuresafe()} isLoading={isSaving}>Save costs</Button></ModalFooter>
+        </ModalContent>
+      </Modal>
     </Stack>
   );
+}
+
+function NumberSetting<K extends keyof PuresafeCostSettings>({ label, field, value, onChange }: { label: string; field: K; value: number | undefined; onChange: React.Dispatch<React.SetStateAction<PuresafeCostSettings | null>> }) {
+  return <FormField label={label}><Input inputMode="decimal" value={value ?? ""} onChange={(event) => onChange((current) => current ? { ...current, [field]: Number(event.target.value) } : current)}/></FormField>;
 }
 
 function toProductForm(product: Product, active: boolean): ProductUpsertInput {

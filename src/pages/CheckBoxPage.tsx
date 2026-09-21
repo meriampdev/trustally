@@ -21,6 +21,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MetricCard } from "../components/MetricCard";
+import { ActualSetAsideModal } from "../components/ActualSetAsideModal";
 import { SectionCard } from "../components/SectionCard";
 import { SetAsideSummary } from "../components/SetAsideSummary";
 import { clearCheckBoxDraft, loadCheckBoxDraft, saveCheckBoxDraft } from "../lib/checkBoxDraft";
@@ -31,6 +32,7 @@ import {
   fetchOutstandingBalances,
   fetchProducts,
   fetchCyclePaymentDetail,
+  fetchCycleSetAside,
   fetchSettings,
   previewBoxCheck,
   recordCycleDifference,
@@ -116,6 +118,8 @@ export default function CheckBoxPage() {
   const [payLaterBalances, setPayLaterBalances] = useState<PayLaterBalance[]>([]);
   const [activeCyclePayments, setActiveCyclePayments] = useState<CyclePaymentDetail | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [completedCycleSetAside, setCompletedCycleSetAside] = useState<CycleSetAside | null>(null);
+  const [isActualSetAsideOpen, setIsActualSetAsideOpen] = useState(false);
   const [draft, setDraft] = useState<CheckBoxDraft | null>(null);
   const [preview, setPreview] = useState<CheckBoxPreview | null>(null);
   const [step, setStep] = useState(0);
@@ -512,6 +516,9 @@ export default function CheckBoxPage() {
       clearCheckBoxDraft(activeDraft.cycleId);
       setPreview(result.preview);
       setStep(4);
+      void fetchCycleSetAside(result.completedCycleId).then(setCompletedCycleSetAside).catch((error) => {
+        toast({ title: "Cycle completed, but Set Aside could not load", description: error instanceof Error ? error.message : "Open the completed cycle from History to record it later.", status: "warning", position: "top" });
+      });
       toast({
         title: "Box check complete",
         description:
@@ -1154,6 +1161,7 @@ export default function CheckBoxPage() {
       ) : null}
 
       {step === 4 && resolvedPreview ? (
+        <Stack spacing={5}>
         <SectionCard eyebrow="Box check complete" title="Next cycle is ready.">
           <SimpleGrid columns={{ base: 2, md: 3, xl: 6 }} spacing={4}>
             <MetricCard
@@ -1190,7 +1198,16 @@ export default function CheckBoxPage() {
             Done
           </Button>
         </SectionCard>
+        {completedCycleSetAside ? <SectionCard eyebrow="Actual Set Aside" title="Record the physical cash you separated">
+          <SetAsideSummary value={completedCycleSetAside} onRecordActual={() => setIsActualSetAsideOpen(true)}/>
+        </SectionCard> : null}
+        </Stack>
       ) : null}
+
+      {completedCycleSetAside ? <ActualSetAsideModal isOpen={isActualSetAsideOpen} cycle={completedCycleSetAside} onClose={() => setIsActualSetAsideOpen(false)} onSaved={(saved) => {
+        setCompletedCycleSetAside(saved);
+        toast({ title: "Actual set aside saved", description: "The cycle and Other Products reserve are now updated.", status: "success", position: "top" });
+      }}/> : null}
 
       <Modal isOpen={isFloatAdjustmentOpen} onClose={() => setIsFloatAdjustmentOpen(false)} isCentered>
         <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />

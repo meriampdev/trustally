@@ -28,6 +28,11 @@ export default function MorePage() {
             to="/cash-movements"
           />
           <ActionCard
+            title="Expenses & break-even"
+            description="Record business expenses and see your break-even progress and projected date."
+            to="/expenses"
+          />
+          <ActionCard
             title="Add stock"
             description="Record bottles you physically add while a cycle is active."
             to="/stock"

@@ -23,6 +23,7 @@ import { SectionCard } from "../components/SectionCard";
 import { SetAsideShareCard, StashBreakdown } from "../components/SetAsideSummary";
 import { fetchReportsSnapshot, fetchReportSetAside } from "../lib/api";
 import { formatCurrency, formatManilaDateTime, formatPercent } from "../lib/format";
+import { exportCsv, printReport } from "../lib/exportData";
 import { formatReportDateRange, ReportRangeKey, reportRangeOptions } from "../lib/reportRange";
 import { calculateReportSetAsideShareComparison, calculateSetAsideShareComparison } from "../lib/setAside";
 import { ReportsSnapshot, ReportSetAside } from "../lib/types";
@@ -104,8 +105,29 @@ export default function ReportsPage() {
     ? null
     : actualGrossSales - totalCapital;
   const setAsideShares = calculateReportSetAsideShareComparison(setAside);
+  const actualSetAsideComplete = (setAside.summary.actualRecordedCycles ?? 0) > 0 && (setAside.summary.actualUnrecordedCycles ?? 0) === 0;
+  const actualToStashTotal = setAside.summary.actualToStashCash == null ? null : setAside.summary.actualToStashCash + (setAside.summary.onlineToStash ?? 0);
+  const summaryExportRows = [
+    { Metric: "Total payments", Value: formatCurrency(snapshot.summary.totalPayments) },
+    { Metric: "Cash payments", Value: formatCurrency(snapshot.summary.cashPayments) },
+    { Metric: "Online payments", Value: formatCurrency(snapshot.summary.onlinePayments) },
+    { Metric: "Bottles taken", Value: snapshot.summary.bottlesTaken },
+    { Metric: "Expected revenue", Value: formatCurrency(snapshot.summary.expectedRevenue) },
+    { Metric: "Known pay-later", Value: formatCurrency(snapshot.summary.knownPayLater) },
+    { Metric: "Unaccounted", Value: formatCurrency(snapshot.summary.unaccountedAmount) },
+    { Metric: "Actual physical set aside", Value: setAside.summary.actualPhysicalTotal == null ? "Not recorded" : formatCurrency(setAside.summary.actualPhysicalTotal) },
+    { Metric: "Other Products used for restocks", Value: setAside.summary.usedForOtherProductRestocks == null ? "Not tracked" : formatCurrency(setAside.summary.usedForOtherProductRestocks) },
+    { Metric: "Other Products net set aside", Value: setAside.summary.netOtherProductsSetAside == null ? "Not tracked" : formatCurrency(setAside.summary.netOtherProductsSetAside) },
+    { Metric: "Opening Other Products reserve", Value: setAside.summary.openingOtherProductsReserve == null ? "Not tracked" : formatCurrency(setAside.summary.openingOtherProductsReserve) },
+    { Metric: "Closing Other Products reserve", Value: setAside.summary.closingOtherProductsReserve == null ? "Not tracked" : formatCurrency(setAside.summary.closingOtherProductsReserve) },
+  ];
+  const summaryExportColumns = [{ label: "Metric", value: (row: typeof summaryExportRows[number]) => row.Metric }, { label: "Value", value: (row: typeof summaryExportRows[number]) => row.Value }];
   return (
     <Stack spacing={5}>
+      <SectionCard eyebrow="Business accounting" title="Capital recovery, profitability, restocks, expenses, and stock movements">
+        <Text color="canvas.700">Open the detailed report workspace for itemized data, filters, CSV, printable reports, and a complete ZIP export.</Text>
+        <Button as={Link} to="/reports/business" mt={4}>Open business reports</Button>
+      </SectionCard>
       <SectionCard eyebrow="Range" title="Choose a reporting window">
         <HStack spacing={3} flexWrap="wrap">
           {reportRangeOptions.map((option) => (
@@ -131,6 +153,7 @@ export default function ReportsPage() {
             ? formatReportDateRange(customStartDate, customEndDate)
             : reportRangeOptions.find((option) => option.value === rangeKey)?.label.toLowerCase()}.
         </Text>
+        <HStack mt={4} spacing={2}><Button size="sm" variant="outline" onClick={() => exportCsv("Trustally operational report", "trustally-operational-report.csv", summaryExportRows, summaryExportColumns)}>Export CSV</Button><Button size="sm" variant="outline" onClick={() => printReport("Trustally operational report", summaryExportRows, summaryExportColumns)}>Print / PDF</Button></HStack>
       </SectionCard>
 
       <SectionCard eyebrow="Operational totals" title="What happened during these cycles">
@@ -153,23 +176,25 @@ export default function ReportsPage() {
         <Text color="canvas.700" fontSize="sm" mt={3}>Gross sales use actual recorded payments. Change float stays in the box and is excluded from Set Aside and earnings.</Text>
       </SectionCard>
 
-      <SectionCard eyebrow="Set Aside" title="Automatic reserves by cycle">
+      <SectionCard eyebrow="Set Aside" title="Targets, actual cash, and reserve by cycle">
         <SimpleGrid columns={{ base: 2, xl: 4 }} spacing={4}>
           <MetricCard label="Cash available for reserves" value={formatCurrency(setAside.summary.cashAvailableAfterChangeFloat)} hint="After preserving change float" onClick={() => setDetailView("cashAvailableAfterChangeFloat")} />
-          <SetAsideShareCard label="Puresafe Capital" target={setAsideShares.puresafe.target} canSetAside={setAsideShares.puresafe.canSetAside} hint="View target and cash-backed amount by cycle" onClick={() => setDetailView("puresafeCapital")} />
-          <SetAsideShareCard label="Other Products Capital" target={setAsideShares.otherProducts.target} canSetAside={setAsideShares.otherProducts.canSetAside} hint="View target and cash-backed amount by cycle" onClick={() => setDetailView("miscCapital")} />
-          <SetAsideShareCard label="Electricity Share" target={setAsideShares.electricity.target} canSetAside={setAsideShares.electricity.canSetAside} hint="View target and cash-backed amount by cycle" onClick={() => setDetailView("electricityShare")} />
+          <SetAsideShareCard label="Puresafe Capital" target={setAsideShares.puresafe.target} canSetAside={setAsideShares.puresafe.canSetAside} showActual actual={setAside.summary.actualPuresafeCapital ?? null} actualComparisonAvailable={actualSetAsideComplete} hint="View target and actual by cycle" onClick={() => setDetailView("puresafeCapital")} />
+          <SetAsideShareCard label="Other Products Capital" target={setAsideShares.otherProducts.target} canSetAside={setAsideShares.otherProducts.canSetAside} showActual actual={setAside.summary.actualOtherProductsCapital ?? null} actualComparisonAvailable={actualSetAsideComplete} hint="View target, actual, and reserve by cycle" onClick={() => setDetailView("miscCapital")}><Text>Used for restocks: {setAside.summary.usedForOtherProductRestocks == null ? "Not tracked" : formatCurrency(setAside.summary.usedForOtherProductRestocks)}</Text><Text>Net set aside: {setAside.summary.netOtherProductsSetAside == null ? "Not tracked" : formatCurrency(setAside.summary.netOtherProductsSetAside)}</Text><Text>Reserve: {setAside.summary.openingOtherProductsReserve == null ? "Not tracked" : formatCurrency(setAside.summary.openingOtherProductsReserve)} opening · {setAside.summary.closingOtherProductsReserve == null ? "Not tracked" : formatCurrency(setAside.summary.closingOtherProductsReserve)} closing</Text></SetAsideShareCard>
+          <SetAsideShareCard label="Electricity Share" target={setAsideShares.electricity.target} canSetAside={setAsideShares.electricity.canSetAside} showActual actual={setAside.summary.actualElectricityShare ?? null} actualComparisonAvailable={actualSetAsideComplete} hint="View target and actual by cycle" onClick={() => setDetailView("electricityShare")} />
           <MetricCard label="Cash shortfall" value={setAside.summary.shortfall == null ? "Unable to calculate" : formatCurrency(setAside.summary.shortfall)} hint="Reserves not covered by cash" onClick={() => setDetailView("shortfall")} />
-          <SetAsideShareCard label="To Stash" target={setAsideShares.toStash.target} canSetAside={setAsideShares.toStash.canSetAside} hint="Online payments plus cash remaining after reserve shares" onClick={() => setDetailView("remainingEarnings")}>
-            <StashBreakdown availableOnlinePayments={setAsideShares.toStash.onlinePayments} cashAfterSetAside={setAsideShares.toStash.cashAfterReserves} />
+          <SetAsideShareCard label="To Stash" target={setAsideShares.toStash.target} canSetAside={setAsideShares.toStash.canSetAside} showActual actual={actualToStashTotal} actualLabel="Actual total to Stash" actualComparisonAvailable={actualSetAsideComplete} hint="Online payments plus recorded physical cash" onClick={() => setDetailView("remainingEarnings")}>
+            <StashBreakdown availableOnlinePayments={setAside.summary.onlineToStash ?? setAsideShares.toStash.onlinePayments} cashAfterSetAside={setAsideShares.toStash.cashAfterReserves} />
           </SetAsideShareCard>
         </SimpleGrid>
+        {(setAside.summary.actualUnrecordedCycles ?? 0) > 0 ? <Text color="canvas.700" mt={3}>{setAside.summary.actualUnrecordedCycles} completed cycle{setAside.summary.actualUnrecordedCycles === 1 ? " is" : "s are"} Not recorded.</Text> : null}
         <Stack spacing={3} mt={4}>
           {setAside.cycles.map((cycle) => (
             <Box key={cycle.cycleId} as="button" width="100%" textAlign="left" cursor="pointer" borderRadius="24px" bg="canvas.50" p={4} _hover={{ bg: "whiteAlpha.100" }} onClick={() => setDetailView(`cycle:${cycle.cycleId}`)}>
               <Text fontWeight="900">Cycle #{cycle.cycleNumber}</Text>
               <Text color="canvas.700" mt={1}>Cash for reserves {formatCurrency(cycle.cashAvailableAfterChangeFloat)}</Text>
-              <Text color="canvas.700" mt={1}>Puresafe, other products, electricity, and To Stash each show their target and cash-backed amount in the cycle details.</Text>
+              <Text color="canvas.700" mt={1}>Actual Set Aside: {cycle.actualSetAside ? formatCurrency(cycle.actualSetAside.physicalCashTotal) : "Not recorded"}</Text>
+              <Text color="canvas.700" mt={1}>Other Products used for restocks {cycle.otherProductsReserve?.usedForRestocks == null ? "Not tracked" : formatCurrency(cycle.otherProductsReserve.usedForRestocks)} · Closing reserve {cycle.otherProductsReserve?.closingBalance == null ? "Not tracked" : formatCurrency(cycle.otherProductsReserve.closingBalance)}</Text>
               <Text color="canvas.700" mt={1}>Cash shortfall {cycle.shortfall == null ? "Unable to calculate" : formatCurrency(cycle.shortfall)} · To Stash can set aside {cycle.remainingEarnings == null ? "Unable to calculate" : formatCurrency(cycle.remainingEarnings)}</Text>
             </Box>
           ))}
@@ -519,14 +544,12 @@ function SetAsideBreakdown({ cycles, detailView }: { cycles: ReportSetAside["cyc
         const totalCapital = cycle.puresafeCapital == null || cycle.miscCapital == null ? null : cycle.puresafeCapital + cycle.miscCapital;
         const shareComparison = calculateSetAsideShareComparison(cycle);
         const values: Record<string, string> = {
-          puresafeCapital: shareComparison.puresafe.target == null || shareComparison.puresafe.canSetAside == null ? "Unable to calculate" : `${formatCurrency(shareComparison.puresafe.target)} target · ${formatCurrency(shareComparison.puresafe.canSetAside)} can be set aside`,
-          electricityShare: `${formatCurrency(shareComparison.electricity.target)} target · ${shareComparison.electricity.canSetAside == null ? "Unable to calculate" : formatCurrency(shareComparison.electricity.canSetAside)} can be set aside`,
-          miscCapital: shareComparison.otherProducts.target == null || shareComparison.otherProducts.canSetAside == null ? "Unable to calculate" : `${formatCurrency(shareComparison.otherProducts.target)} target · ${formatCurrency(shareComparison.otherProducts.canSetAside)} can be set aside`,
+          puresafeCapital: `${shareComparison.puresafe.target == null ? "Unable to calculate" : formatCurrency(shareComparison.puresafe.target)} target · ${cycle.actualSetAside ? formatCurrency(cycle.actualSetAside.puresafeCapital) : "Not recorded"} actual`,
+          electricityShare: `${formatCurrency(shareComparison.electricity.target)} target · ${cycle.actualSetAside ? formatCurrency(cycle.actualSetAside.electricityShare) : "Not recorded"} actual`,
+          miscCapital: `${shareComparison.otherProducts.target == null ? "Unable to calculate" : formatCurrency(shareComparison.otherProducts.target)} target · ${cycle.actualSetAside ? formatCurrency(cycle.actualSetAside.otherProductsCapital) : "Not recorded"} actual · ${cycle.otherProductsReserve?.usedForRestocks == null ? "Not tracked" : formatCurrency(cycle.otherProductsReserve.usedForRestocks)} used · ${cycle.otherProductsReserve?.closingBalance == null ? "Not tracked" : formatCurrency(cycle.otherProductsReserve.closingBalance)} closing reserve`,
           totalCapital: totalCapital == null ? "Unable to calculate" : formatCurrency(totalCapital),
           totalSetAside: cycle.totalSetAside == null ? "Unable to calculate" : formatCurrency(cycle.totalSetAside),
-          remainingEarnings: shareComparison.toStash.target == null || shareComparison.toStash.canSetAside == null
-            ? "Unable to calculate"
-            : `${formatCurrency(shareComparison.toStash.target)} target · ${formatCurrency(shareComparison.toStash.canSetAside)} can be set aside (${formatCurrency(shareComparison.toStash.onlinePayments)} online + ${formatCurrency(shareComparison.toStash.cashAfterReserves)} cash)`,
+          remainingEarnings: `${shareComparison.toStash.target == null ? "Unable to calculate" : formatCurrency(shareComparison.toStash.target)} target · ${cycle.actualSetAside ? `${formatCurrency(cycle.actualSetAside.toStashCash)} actual cash + ${formatCurrency(cycle.actualSetAside.onlineToStash)} online` : "Not recorded"}`,
           cashAvailableAfterChangeFloat: formatCurrency(cycle.cashAvailableAfterChangeFloat),
           availableOnlinePayments: formatCurrency(cycle.availableOnlinePayments),
           totalAvailable: formatCurrency(cycle.totalAvailable),

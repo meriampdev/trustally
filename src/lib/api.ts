@@ -1,7 +1,9 @@
 import { supabase } from "../utils/supabase";
 import {
   AccessibleLocation,
+  ActualSetAsideInput,
   BoxCheckCompletion,
+  BusinessAccountingReport,
   CashMovement,
   CheckBoxCountInput,
   CheckBoxDraftPayload,
@@ -16,6 +18,10 @@ import {
   CycleStatus,
   DetectedCycle,
   DisclosureCollectionReport,
+  Expense,
+  ExpenseInput,
+  InventoryRestock,
+  InventoryRestockInput,
   HistoryFilter,
   HistoryItem,
   HomeDashboard,
@@ -25,6 +31,7 @@ import {
   PaymentReceipt,
   Product,
   ProductUpsertInput,
+  PuresafeCostSettings,
   ReportDrilldown,
   ReportCashFloatDetail,
   ReportPaymentDetail,
@@ -47,6 +54,115 @@ export async function fetchHomeDashboard(selectedLocationId?: string | null) {
 
 export async function fetchProducts() {
   return rpc<Product[]>("list_products");
+}
+
+export async function fetchExpenses(locationId: string) {
+  try {
+    return await rpc<Expense[]>("list_expenses", { p_location_id: locationId });
+  } catch (error) {
+    if (isMissingRpcError(error, "list_expenses")) {
+      throw new Error("Expense tracking is not available until the latest database migration is applied.");
+    }
+    throw error;
+  }
+}
+
+export async function saveExpense(input: ExpenseInput) {
+  try {
+    return await rpc<Expense>("save_expense", {
+      p_location_id: input.locationId,
+      p_id: input.id ?? null,
+      p_incurred_on: input.incurredOn,
+      p_category: input.category,
+      p_description: input.description?.trim() || null,
+      p_amount: input.amount,
+    });
+  } catch (error) {
+    if (isMissingRpcError(error, "save_expense")) {
+      throw new Error("Expense tracking is not available until the latest database migration is applied.");
+    }
+    throw error;
+  }
+}
+
+export async function archiveExpense(expenseId: string) {
+  try {
+    return await rpc<{ id: string; archived: boolean }>("archive_expense", { p_expense_id: expenseId });
+  } catch (error) {
+    if (isMissingRpcError(error, "archive_expense")) {
+      throw new Error("Expense tracking is not available until the latest database migration is applied.");
+    }
+    throw error;
+  }
+}
+
+export async function createInventoryRestock(input: InventoryRestockInput) {
+  return rpc<{ restockId: string; stockAdditionId: string; cycleId: string }>("create_inventory_restock", {
+    p_product_id: input.productId,
+    p_quantity: input.quantity,
+    p_occurred_at: input.occurredAt,
+    p_total_amount_paid: input.totalAmountPaid,
+    p_unit_cost_override: input.unitCostOverride?.trim() || null,
+    p_selling_price: input.sellingPrice?.trim() || null,
+    p_supplier: input.supplier?.trim() || null,
+    p_receipt_reference: input.receiptReference?.trim() || null,
+    p_notes: input.notes?.trim() || null,
+    p_puresafe_detail: input.puresafeDetail ?? {},
+    p_idempotency_key: input.idempotencyKey,
+  });
+}
+
+export async function fetchInventoryRestocks(startAt?: string | null, endAt?: string | null) {
+  return rpc<InventoryRestock[]>("list_inventory_restocks", {
+    p_start_at: startAt ?? null,
+    p_end_at: endAt ?? null,
+  });
+}
+
+export async function updateInventoryRestock(input: Omit<InventoryRestockInput, "productId" | "sellingPrice" | "puresafeDetail" | "idempotencyKey"> & { restockId: string }) {
+  return rpc<{ restockId: string; updated: boolean }>("update_inventory_restock", {
+    p_restock_id: input.restockId,
+    p_quantity: input.quantity,
+    p_occurred_at: input.occurredAt,
+    p_total_amount_paid: input.totalAmountPaid,
+    p_unit_cost_override: input.unitCostOverride?.trim() || null,
+    p_supplier: input.supplier?.trim() || null,
+    p_receipt_reference: input.receiptReference?.trim() || null,
+    p_notes: input.notes?.trim() || null,
+  });
+}
+
+export async function archiveInventoryRestock(restockId: string, reason: string) {
+  return rpc<{ restockId: string; archived: boolean }>("archive_inventory_restock", {
+    p_restock_id: restockId,
+    p_reason: reason,
+  });
+}
+
+export async function fetchPuresafeCostSettings(productId: string) {
+  return rpc<PuresafeCostSettings>("get_puresafe_cost_settings", { p_product_id: productId });
+}
+
+export async function savePuresafeCostSettings(value: PuresafeCostSettings) {
+  return rpc<PuresafeCostSettings>("save_puresafe_cost_settings", {
+    p_product_id: value.productId,
+    p_bottle_pack_units: value.bottlePackUnits,
+    p_bottle_pack_cost: String(value.bottlePackCost),
+    p_default_pack_count: String(value.defaultPackCount),
+    p_water_container_cost: String(value.waterContainerCost),
+    p_default_bottles_per_container: String(value.defaultBottlesPerContainer),
+    p_cap_seal_per_unit: String(value.capSealPerUnit),
+    p_sticker_per_unit: String(value.stickerPerUnit),
+    p_printing_per_unit: String(value.printingPerUnit),
+    p_other_packaging_per_unit: String(value.otherPackagingPerUnit),
+  });
+}
+
+export async function fetchBusinessAccountingReport(startAt: string, endAt: string) {
+  return rpc<BusinessAccountingReport>("get_business_accounting_report", {
+    p_start_at: startAt,
+    p_end_at: endAt,
+  });
 }
 
 export async function fetchAccessibleLocations() {
@@ -349,6 +465,18 @@ export async function fetchCycleCashFloatDetail(cycleId: string) {
 
 export async function fetchCycleSetAside(cycleId: string) {
   const value = await rpc<CycleSetAside>("get_cycle_set_aside", { p_cycle_id: cycleId });
+  return applyCashOnlyCycleSetAside(value);
+}
+
+export async function saveCycleSetAsideActual(input: ActualSetAsideInput) {
+  const value = await rpc<CycleSetAside>("save_cycle_set_aside_actual", {
+    p_cycle_id: input.cycleId,
+    p_actual_puresafe_capital: input.puresafeCapital,
+    p_actual_other_products_capital: input.otherProductsCapital,
+    p_actual_electricity_share: input.electricityShare,
+    p_actual_to_stash_cash: input.toStashCash,
+    p_note: input.note ?? null,
+  });
   return applyCashOnlyCycleSetAside(value);
 }
 

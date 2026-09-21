@@ -20,6 +20,7 @@ import {
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { MetricCard } from "../components/MetricCard";
+import { ActualSetAsideModal } from "../components/ActualSetAsideModal";
 import { PaymentDetailsModal } from "../components/PaymentDetailsModal";
 import { CycleHonestyPanel } from "../components/CycleHonestyPanel";
 import { SectionCard } from "../components/SectionCard";
@@ -32,6 +33,7 @@ import {
   formatPercent,
 } from "../lib/format";
 import { CycleCashFloatDetail, CycleDetail, CycleHonestyDetail, CyclePaymentDetail, CyclePaymentRecord, CycleSetAside } from "../lib/types";
+import { exportCsv, printReport } from "../lib/exportData";
 
 export default function CycleDetailPage() {
   const { cycleId = "" } = useParams();
@@ -47,6 +49,7 @@ export default function CycleDetailPage() {
   const [floatAdjustmentReason, setFloatAdjustmentReason] = useState("");
   const [isSavingFloat, setIsSavingFloat] = useState(false);
   const [isCorrectionOpen, setIsCorrectionOpen] = useState(false);
+  const [isActualSetAsideOpen, setIsActualSetAsideOpen] = useState(false);
   const [isSavingCorrection, setIsSavingCorrection] = useState(false);
   const [correctionError, setCorrectionError] = useState("");
   const [correction, setCorrection] = useState({
@@ -92,6 +95,8 @@ export default function CycleDetailPage() {
   const grossProfit = totalCapital == null
     ? null
     : payments.summary.totalPayments - totalCapital;
+  const cycleExportRows = detail.productBreakdown.map((item) => ({ Product: item.productName, "Opening stock": item.startingQuantity, Restocked: item.stockAddedQuantity, "Non-sale": item.nonSaleQuantity, "Units sold": item.unitsTaken, "Closing stock": item.endingQuantity, Revenue: formatCurrency(item.expectedRevenue), COGS: formatCurrency(item.cogs), "Gross profit": formatCurrency(item.grossProfit) }));
+  const cycleExportColumns = Object.keys(cycleExportRows[0] ?? {}).map((key) => ({ label: key, value: (row: typeof cycleExportRows[number]) => row[key as keyof typeof row] }));
   function openPaymentDetails(channel: CyclePaymentRecord["channel"]) {
     setSearchParams({ payments: channel });
   }
@@ -181,7 +186,11 @@ export default function CycleDetailPage() {
   return (
     <Stack spacing={5}>
       <SectionCard eyebrow={`Cycle #${detail.cycleNumber}`} title={formatDateRange(detail.startedAt, detail.completedAt)}>
-        {detail.status === "COMPLETED" ? <Button mb={4} variant="outline" onClick={openCycleCorrection}>Correct completed cycle</Button> : null}
+        <Stack direction={{ base: "column", sm: "row" }} mb={4} spacing={2}>
+          {detail.status === "COMPLETED" ? <Button variant="outline" onClick={openCycleCorrection}>Correct completed cycle</Button> : null}
+          <Button variant="outline" onClick={() => exportCsv(`Trustally Cycle #${detail.cycleNumber}`, `trustally-cycle-${detail.cycleNumber}.csv`, cycleExportRows, cycleExportColumns)}>Export CSV</Button>
+          <Button variant="outline" onClick={() => printReport(`Trustally Cycle #${detail.cycleNumber}`, cycleExportRows, cycleExportColumns)}>Print / PDF</Button>
+        </Stack>
         <SimpleGrid columns={{ base: 2, xl: 6 }} spacing={4}>
           <MetricCard label="Bottles taken" value={String(detail.totals.bottlesTaken)} />
           <MetricCard label="Expected sales" value={formatCurrency(detail.totals.expectedRevenue)} />
@@ -239,7 +248,7 @@ export default function CycleDetailPage() {
       </SectionCard>
 
       <SectionCard eyebrow="Set Aside" title="Money reserved from this cycle">
-        <SetAsideSummary value={setAside} />
+        <SetAsideSummary value={setAside} onRecordActual={() => setIsActualSetAsideOpen(true)} />
       </SectionCard>
 
       <SectionCard eyebrow="Products" title="Product breakdown">
@@ -289,6 +298,11 @@ export default function CycleDetailPage() {
         records={payments.records}
         channel={paymentDetailView === "cash" || paymentDetailView === "online" ? paymentDetailView : undefined}
       />
+
+      <ActualSetAsideModal isOpen={isActualSetAsideOpen} cycle={setAside} onClose={() => setIsActualSetAsideOpen(false)} onSaved={(saved) => {
+        setSetAside(saved);
+        toast({ title: "Actual set aside saved", description: "This cycle’s physical cash and Other Products reserve were updated.", status: "success", position: "top" });
+      }}/>
 
       <Modal isOpen={floatAdjustmentField !== null} onClose={() => setFloatAdjustmentField(null)} isCentered>
         <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />

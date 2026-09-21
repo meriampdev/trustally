@@ -20,6 +20,7 @@ import { SectionCard } from "../components/SectionCard";
 import { PaymentDetailsModal } from "../components/PaymentDetailsModal";
 import { fetchCycleCashFloatDetail, fetchCycleDisclosureAndCollection, fetchCyclePaymentDetail, fetchHistoryFeed } from "../lib/api";
 import { formatCurrency, formatDateTimeLabel, formatPercent } from "../lib/format";
+import { exportCsv, printReport } from "../lib/exportData";
 import { CycleCashFloatDetail, CycleHonestyDetail, CyclePaymentDetail, HistoryFilter, HistoryItem } from "../lib/types";
 
 interface EnrichedHistoryItem extends HistoryItem {
@@ -80,6 +81,13 @@ export default function HistoryPage() {
     }
   }
 
+  const historyExportRows = items.map((item) => ({
+    Date: formatDateTimeLabel(item.happenedAt), Type: item.eventType, Title: item.title, Details: item.subtitle,
+    Quantity: item.quantity ?? "", "Bottles taken": item.bottlesTaken ?? "", "Expected revenue": item.expectedRevenue == null ? "" : formatCurrency(item.expectedRevenue),
+    "Total collected": item.totalCollected == null ? "" : formatCurrency(item.totalCollected), "Collection rate": item.collectionRate == null ? "" : formatPercent(item.collectionRate),
+  }));
+  const historyColumns = Object.keys(historyExportRows[0] ?? {}).map((key) => ({ label: key, value: (row: typeof historyExportRows[number]) => row[key as keyof typeof row] }));
+
   return (
     <Stack spacing={5}>
       <SectionCard eyebrow="Filters" title="Browse box activity">
@@ -94,6 +102,8 @@ export default function HistoryPage() {
               {item.label}
             </Button>
           ))}
+          <Button variant="outline" onClick={() => exportCsv("Trustally history", `trustally-history-${filter}.csv`, historyExportRows, historyColumns)}>Export CSV</Button>
+          <Button variant="outline" onClick={() => printReport("Trustally history", historyExportRows, historyColumns)}>Print / PDF</Button>
         </HStack>
       </SectionCard>
 

@@ -2,9 +2,14 @@
 // Keep in sync with `supabase gen types` when a full generated schema is introduced.
 import type {
   CycleHonestyDetail,
+  BusinessAccountingReport,
   CycleCashFloatDetail,
   CyclePaymentDetail,
   DisclosureSource,
+  Expense,
+  ExpenseCategory,
+  InventoryRestock,
+  PuresafeCostSettings,
   PaymentExpectation,
   PersonHonestySummary,
   ReportPaymentDetail,
@@ -48,6 +53,41 @@ export interface DisclosureCollectionDatabaseTypes {
     };
   };
   Functions: {
+    create_inventory_restock: {
+      Args: { p_product_id: string; p_quantity: number; p_occurred_at: string; p_total_amount_paid: string; p_unit_cost_override?: string | null; p_selling_price?: string | null; p_supplier?: string | null; p_receipt_reference?: string | null; p_notes?: string | null; p_puresafe_detail?: Record<string, unknown>; p_idempotency_key: string };
+      Returns: { restockId: string; stockAdditionId: string; cycleId: string };
+    };
+    list_inventory_restocks: {
+      Args: { p_start_at?: string | null; p_end_at?: string | null };
+      Returns: InventoryRestock[];
+    };
+    get_puresafe_cost_settings: {
+      Args: { p_product_id: string };
+      Returns: PuresafeCostSettings;
+    };
+    get_business_accounting_report: {
+      Args: { p_start_at?: string | null; p_end_at?: string | null };
+      Returns: BusinessAccountingReport;
+    };
+    list_expenses: {
+      Args: { p_location_id: string };
+      Returns: Expense[];
+    };
+    save_expense: {
+      Args: {
+        p_location_id: string;
+        p_id?: string | null;
+        p_incurred_on?: string;
+        p_category?: ExpenseCategory;
+        p_description?: string | null;
+        p_amount?: string;
+      };
+      Returns: Expense;
+    };
+    archive_expense: {
+      Args: { p_expense_id: string };
+      Returns: { id: string; archived: boolean };
+    };
     save_bottle_taken_record: {
       Args: {
         p_id: string | null;
@@ -88,6 +128,17 @@ export interface DisclosureCollectionDatabaseTypes {
     };
     get_cycle_set_aside: {
       Args: { p_cycle_id: string };
+      Returns: CycleSetAside;
+    };
+    save_cycle_set_aside_actual: {
+      Args: {
+        p_cycle_id: string;
+        p_actual_puresafe_capital: string;
+        p_actual_other_products_capital: string;
+        p_actual_electricity_share: string;
+        p_actual_to_stash_cash: string;
+        p_note?: string | null;
+      };
       Returns: CycleSetAside;
     };
     get_report_set_aside: {
