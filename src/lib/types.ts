@@ -546,6 +546,9 @@ export interface CycleSetAside {
   closingChangeFloat: number;
   cashAvailableAfterChangeFloat: number;
   availableOnlinePayments: number;
+  gcashPayments?: number;
+  mayaPayments?: number;
+  otherOnlinePayments?: number;
   totalAvailable: number;
   puresafeBottlesToReplace: number;
   puresafeCostPerUnit: number | null;
@@ -614,6 +617,9 @@ export interface ReportSetAside {
     actualToStashCash?: number | null;
     actualPhysicalTotal?: number | null;
     onlineToStash?: number;
+    gcashToStash?: number;
+    mayaToStash?: number;
+    otherOnlineToStash?: number;
     usedForOtherProductRestocks?: number | null;
     netOtherProductsSetAside?: number | null;
     openingOtherProductsReserve?: number | null;

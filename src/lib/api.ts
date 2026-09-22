@@ -469,15 +469,22 @@ export async function fetchCycleSetAside(cycleId: string) {
 }
 
 export async function saveCycleSetAsideActual(input: ActualSetAsideInput) {
-  const value = await rpc<CycleSetAside>("save_cycle_set_aside_actual", {
-    p_cycle_id: input.cycleId,
-    p_actual_puresafe_capital: input.puresafeCapital,
-    p_actual_other_products_capital: input.otherProductsCapital,
-    p_actual_electricity_share: input.electricityShare,
-    p_actual_to_stash_cash: input.toStashCash,
-    p_note: input.note ?? null,
-  });
-  return applyCashOnlyCycleSetAside(value);
+  try {
+    const value = await rpc<CycleSetAside>("save_cycle_set_aside_actual", {
+      p_cycle_id: input.cycleId,
+      p_actual_puresafe_capital: input.puresafeCapital,
+      p_actual_other_products_capital: input.otherProductsCapital,
+      p_actual_electricity_share: input.electricityShare,
+      p_actual_to_stash_cash: input.toStashCash,
+      p_note: input.note?.trim() || null,
+    });
+    return applyCashOnlyCycleSetAside(value);
+  } catch (error) {
+    if (isMissingRpcError(error, "save_cycle_set_aside_actual")) {
+      throw new Error("Actual set-aside recording is not available until the latest database migration is applied.");
+    }
+    throw error;
+  }
 }
 
 export async function fetchReportSetAside(

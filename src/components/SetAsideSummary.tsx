@@ -47,10 +47,13 @@ export function SetAsideSummary({ value, onMetricClick, onRecordActual }: { valu
         >
             <StashBreakdown
               availableOnlinePayments={shares.toStash.onlinePayments}
+              gcashPayments={value.gcashPayments}
+              mayaPayments={value.mayaPayments}
+              otherOnlinePayments={value.otherOnlinePayments}
               cashAfterSetAside={shares.toStash.cashAfterReserves}
             />
             {actual ? <Text>Total actually to Stash: {formatCurrency(actual.toStashTotal)}</Text> : null}
-            {actual ? <Text>Recorded cash: {formatCurrency(actual.toStashCash)} · Automatic online: {formatCurrency(actual.onlineToStash)}</Text> : null}
+            {actual ? <Text>Recorded physical cash: {formatCurrency(actual.toStashCash)}</Text> : null}
         </SetAsideShareCard>
       </SimpleGrid>
 
@@ -87,7 +90,7 @@ export function SetAsideSummary({ value, onMetricClick, onRecordActual }: { valu
         </Text>
         {cashAfterSetAside != null ? (
           <Stack spacing={1} mt={2} color="canvas.700">
-            <Text>Cash after set aside: {formatCurrency(cashAfterSetAside)} · Online to stash: {formatCurrency(value.availableOnlinePayments)}</Text>
+            <Text>Cash after set aside: {formatCurrency(cashAfterSetAside)} · GCash to Stash: {formatCurrency(value.gcashPayments ?? 0)} · Maya to Stash: {formatCurrency(value.mayaPayments ?? 0)}{(value.otherOnlinePayments ?? 0) > 0 ? ` · Other online: ${formatCurrency(value.otherOnlinePayments ?? 0)}` : ""}</Text>
           </Stack>
         ) : null}
       </Box>
@@ -138,14 +141,25 @@ export function SetAsideShareCard({
 
 export function StashBreakdown({
   availableOnlinePayments,
+  gcashPayments,
+  mayaPayments,
+  otherOnlinePayments,
   cashAfterSetAside,
 }: {
   availableOnlinePayments: number;
+  gcashPayments?: number;
+  mayaPayments?: number;
+  otherOnlinePayments?: number;
   cashAfterSetAside: number | null;
 }) {
+  const hasMethodBreakdown = gcashPayments != null || mayaPayments != null || otherOnlinePayments != null;
   return (
     <Stack spacing={0.5}>
-      <Text>Online payments: {formatCurrency(availableOnlinePayments)}</Text>
+      {hasMethodBreakdown ? <>
+        <Text>GCash: {formatCurrency(gcashPayments ?? 0)}</Text>
+        <Text>Maya: {formatCurrency(mayaPayments ?? 0)}</Text>
+        {(otherOnlinePayments ?? 0) > 0 ? <Text>Other online: {formatCurrency(otherOnlinePayments ?? 0)}</Text> : null}
+      </> : <Text>Online payments: {formatCurrency(availableOnlinePayments)}</Text>}
       <Text>Cash after reserves: {cashAfterSetAside == null ? "Unable to calculate" : formatCurrency(cashAfterSetAside)}</Text>
     </Stack>
   );

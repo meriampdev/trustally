@@ -63,7 +63,8 @@ export function ActualSetAsideModal({ isOpen, cycle, onClose, onSaved }: Props) 
         <Box bg="canvas.50" borderRadius="20px" p={4}>
           <Text fontWeight="900">Cycle #{cycle.cycleNumber}</Text>
           <Text color="canvas.700" mt={1}>Physical cash available after Change Float: {formatCurrency(cycle.cashAvailableAfterChangeFloat)}</Text>
-          <Text color="canvas.700" mt={1}>Online payments are not editable here. {formatCurrency(cycle.availableOnlinePayments)} goes entirely to Stash.</Text>
+          <Text color="canvas.700" mt={1}>Online payments are not editable and go entirely to Stash.</Text>
+          <Text color="canvas.700" mt={1}>GCash: {formatCurrency(cycle.gcashPayments ?? 0)} · Maya: {formatCurrency(cycle.mayaPayments ?? 0)}{(cycle.otherOnlinePayments ?? 0) > 0 ? ` · Other online: ${formatCurrency(cycle.otherOnlinePayments ?? 0)}` : ""}</Text>
         </Box>
         <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4}>
           <AmountField label="Puresafe Capital" target={targets.puresafe.target} value={puresafe} onChange={setPuresafe}/>
@@ -74,7 +75,7 @@ export function ActualSetAsideModal({ isOpen, cycle, onClose, onSaved }: Props) 
         <Box bg="canvas.50" borderRadius="20px" p={4}>
           <Text>Physical cash recorded: <strong>{formatCurrency(physicalTotal)}</strong></Text>
           <Text color={remainingCash < 0 ? "caution.500" : "canvas.700"} mt={1}>Cash not allocated: {formatCurrency(Math.max(remainingCash, 0))}</Text>
-          <Text color="canvas.700" mt={1}>Total going to Stash: {formatCurrency(parseNumberInput(toStashCash) + cycle.availableOnlinePayments)} ({formatCurrency(parseNumberInput(toStashCash))} cash + {formatCurrency(cycle.availableOnlinePayments)} online)</Text>
+          <Text color="canvas.700" mt={1}>Total going to Stash: {formatCurrency(parseNumberInput(toStashCash) + cycle.availableOnlinePayments)} ({formatCurrency(parseNumberInput(toStashCash))} cash + {formatCurrency(cycle.gcashPayments ?? 0)} GCash + {formatCurrency(cycle.mayaPayments ?? 0)} Maya{(cycle.otherOnlinePayments ?? 0) > 0 ? ` + ${formatCurrency(cycle.otherOnlinePayments ?? 0)} other online` : ""})</Text>
         </Box>
         <FormControl><FormLabel>Note (optional)</FormLabel><Textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Where the cash was placed or any correction details"/></FormControl>
         {error ? <Text color="caution.500">{error}</Text> : null}

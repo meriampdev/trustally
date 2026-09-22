@@ -136,11 +136,29 @@ declare
   v_opening numeric(14,2);
   v_closing numeric(14,2);
   v_actual_json jsonb := null;
+  v_payment_detail jsonb;
+  v_gcash numeric(14,2) := 0;
+  v_maya numeric(14,2) := 0;
+  v_other_online numeric(14,2) := 0;
 begin
   select * into v_cycle from public.box_cycles where id=p_cycle_id;
   if not found then raise exception 'Cycle not found.'; end if;
   perform public.require_location_access(v_cycle.location_id,false);
   v_detail:=public.get_cycle_set_aside_calculated(p_cycle_id);
+  v_payment_detail:=public.get_cycle_payment_detail(p_cycle_id);
+  select
+    round(coalesce(sum((payment->>'amount')::numeric) filter (where payment->>'method'='GCASH'),0),2),
+    round(coalesce(sum((payment->>'amount')::numeric) filter (where payment->>'method'='MAYA'),0),2),
+    round(coalesce(sum((payment->>'amount')::numeric) filter (where payment->>'method' not in ('GCASH','MAYA')),0),2)
+  into v_gcash,v_maya,v_other_online
+  from jsonb_array_elements(coalesce(v_payment_detail->'records','[]'::jsonb)) payment
+  where payment->>'channel'='online';
+  v_detail:=v_detail || jsonb_build_object(
+    'gcashPayments',v_gcash,
+    'mayaPayments',v_maya,
+    'otherOnlinePayments',v_other_online,
+    'availableOnlinePayments',round(v_gcash+v_maya+v_other_online,2)
+  );
 
   select * into v_actual from public.cycle_set_aside_actuals where cycle_id=p_cycle_id;
   if found then
@@ -243,6 +261,7 @@ begin
     (v_detail->>'availableOnlinePayments')::numeric,v_puresafe,v_other,v_electricity,v_stash_cash,
     nullif(btrim(coalesce(p_note,'')),''),v_user,v_user)
   on conflict(cycle_id) do update set
+    online_to_stash=excluded.online_to_stash,
     actual_puresafe_capital=excluded.actual_puresafe_capital,
     actual_other_products_capital=excluded.actual_other_products_capital,
     actual_electricity_share=excluded.actual_electricity_share,
@@ -274,6 +293,7 @@ declare
   v_end_at timestamptz;
   v_base jsonb;
   v_actual jsonb;
+  v_cycles jsonb := '[]'::jsonb;
   v_tracking_started_at timestamptz;
   v_opening numeric(14,2);
   v_closing numeric(14,2);
@@ -309,18 +329,21 @@ begin
     'actualToStashCash',case when count(actual.id)=0 then null else round(sum(actual.actual_to_stash_cash),2) end,
     'actualPhysicalTotal',case when count(actual.id)=0 then null else round(sum(actual.actual_puresafe_capital+actual.actual_other_products_capital+actual.actual_electricity_share+actual.actual_to_stash_cash),2) end,
     'onlineToStash',round(coalesce(sum((calculated.detail->>'availableOnlinePayments')::numeric),0),2),
+    'gcashToStash',round(coalesce(sum((calculated.detail->>'gcashPayments')::numeric),0),2),
+    'mayaToStash',round(coalesce(sum((calculated.detail->>'mayaPayments')::numeric),0),2),
+    'otherOnlineToStash',round(coalesce(sum((calculated.detail->>'otherOnlinePayments')::numeric),0),2),
     'usedForOtherProductRestocks',case when v_tracking_started_at is null then null else round(v_used,2) end,
     'netOtherProductsSetAside',case when v_tracking_started_at is null then null else round(coalesce(sum(actual.actual_other_products_capital),0)-v_used,2) end,
     'openingOtherProductsReserve',v_opening,'closingOtherProductsReserve',v_closing,
     'reserveTrackingStartedAt',v_tracking_started_at,
     'actualRecordedCycles',count(actual.id),'actualUnrecordedCycles',count(*)-count(actual.id)
-  ) into v_actual
+  ), coalesce(jsonb_agg(calculated.detail order by bc.completed_at desc),'[]'::jsonb) into v_actual,v_cycles
   from public.box_cycles bc
   cross join lateral (select public.get_cycle_set_aside(bc.id) as detail) calculated
   left join public.cycle_set_aside_actuals actual on actual.cycle_id=bc.id
   where bc.location_id=v_location and bc.status='COMPLETED' and bc.completed_at between v_start_at and v_end_at;
 
-  return jsonb_build_object('summary',coalesce(v_base->'summary','{}'::jsonb)||coalesce(v_actual,'{}'::jsonb),'cycles',coalesce(v_base->'cycles','[]'::jsonb));
+  return jsonb_build_object('summary',coalesce(v_base->'summary','{}'::jsonb)||coalesce(v_actual,'{}'::jsonb),'cycles',v_cycles);
 end;
 $$;
 

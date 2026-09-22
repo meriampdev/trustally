@@ -47,7 +47,7 @@ import {
   formatPercent,
 } from "../lib/format";
 import { formatReportDateRange, ReportRangeKey } from "../lib/reportRange";
-import { calculateReportSetAsideShareComparison, calculateSetAsideShareComparison } from "../lib/setAside";
+import { calculateReportSetAsideShareComparison, calculateSetAsideShareComparison, summarizeOnlinePayments } from "../lib/setAside";
 import { CashMovement, CycleCashFloatDetail, CycleHonestyDetail, CyclePaymentDetail, CyclePaymentRecord, CycleSetAside, HistoryItem, HomeDashboard, PayLaterBalance, Product, ReportSetAside, ReportsSnapshot } from "../lib/types";
 
 type MetricsRange = "latest" | ReportRangeKey;
@@ -290,6 +290,7 @@ export default function HomePage() {
   const metricsPaymentRecords = isLatestMetrics
     ? recentCyclePayments?.records ?? []
     : rangeMetrics?.reportPaymentRecords ?? [];
+  const metricsOnlineBreakdown = summarizeOnlinePayments(metricsPaymentRecords);
   const metricsSelfReported = isLatestMetrics ? recentHonesty?.summary.selfReportedBottles ?? 0 : rangeMetrics?.summary.selfReportedBottles ?? 0;
   const metricsUnattributed = isLatestMetrics ? recentHonesty?.summary.unattributedMissingBottles ?? 0 : rangeMetrics?.summary.unattributedMissingBottles ?? 0;
   const metricsUnclassified = isLatestMetrics ? recentHonesty?.summary.unclassifiedHistoricalRecords ?? 0 : rangeMetrics?.summary.unclassifiedHistoricalRecords ?? 0;
@@ -307,6 +308,12 @@ export default function HomePage() {
     ? null
     : metricsGrossSales - metricsTotalCapital;
   const recentSetAsideShares = recentSetAside ? calculateSetAsideShareComparison(recentSetAside) : null;
+  const displayedRecentSetAside = recentSetAside ? {
+    ...recentSetAside,
+    gcashPayments: metricsOnlineBreakdown.gcashPayments,
+    mayaPayments: metricsOnlineBreakdown.mayaPayments,
+    otherOnlinePayments: metricsOnlineBreakdown.otherOnlinePayments,
+  } : null;
   const rangeSetAsideShares = rangeSetAside ? calculateReportSetAsideShareComparison(rangeSetAside) : null;
   const rangeActualComplete = Boolean(rangeSetAside && (rangeSetAside.summary.actualRecordedCycles ?? 0) > 0 && (rangeSetAside.summary.actualUnrecordedCycles ?? 0) === 0);
   const rangeTotalTargets = rangeSetAsideShares?.puresafe.target == null || rangeSetAsideShares.otherProducts.target == null || rangeSetAsideShares.toStash.target == null
@@ -513,15 +520,15 @@ export default function HomePage() {
       <SectionCard eyebrow="Set Aside" title={`${metricsTitle} reserves`} collapsible collapseKey="dashboard-set-aside">
         {isMetricsLoading ? <Spinner color="brand.400" /> : metricsError ? (
           <Text color="caution.600">{metricsError}</Text>
-        ) : isLatestMetrics && recentSetAside ? (
-          <SetAsideSummary value={recentSetAside} onRecordActual={() => setIsActualSetAsideOpen(true)} onMetricClick={(metric) => {
+        ) : isLatestMetrics && displayedRecentSetAside ? (
+          <SetAsideSummary value={displayedRecentSetAside} onRecordActual={() => setIsActualSetAsideOpen(true)} onMetricClick={(metric) => {
             const detailMap: Record<string, DashboardDetail> = {
-              cashAvailableAfterChangeFloat: { title: "Cash available for reserves", description: "Cash available for set aside after preserving the closing change float.", values: [["Available cash", formatCurrency(recentSetAside.cashAvailableAfterChangeFloat)]] },
-              puresafeCapital: { title: "Puresafe capital", description: "Replacement cost reserved first from available cash.", values: [["Target", recentSetAsideShares?.puresafe.target == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.puresafe.target)], ["Can set aside", recentSetAsideShares?.puresafe.canSetAside == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.puresafe.canSetAside)], ["Bottles", String(recentSetAside.puresafeBottlesToReplace)], ["Cost per bottle", formatCurrency(recentSetAside.puresafeCostPerUnit)]] },
-              electricityShare: { title: "Electricity share", description: "Funded from cash remaining after Puresafe and other-products capital.", values: [["Target", recentSetAsideShares?.electricity.target == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.electricity.target)], ["Can set aside", recentSetAsideShares?.electricity.canSetAside == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.electricity.canSetAside)], ["Hours", recentSetAside.cycleHours.toFixed(2)], ["Rate", formatCurrency(recentSetAside.electricityCostPerHour)]] },
+              cashAvailableAfterChangeFloat: { title: "Cash available for reserves", description: "Cash available for set aside after preserving the closing change float.", values: [["Available cash", formatCurrency(displayedRecentSetAside.cashAvailableAfterChangeFloat)]] },
+              puresafeCapital: { title: "Puresafe capital", description: "Replacement cost reserved first from available cash.", values: [["Target", recentSetAsideShares?.puresafe.target == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.puresafe.target)], ["Can set aside", recentSetAsideShares?.puresafe.canSetAside == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.puresafe.canSetAside)], ["Bottles", String(displayedRecentSetAside.puresafeBottlesToReplace)], ["Cost per bottle", formatCurrency(displayedRecentSetAside.puresafeCostPerUnit)]] },
+              electricityShare: { title: "Electricity share", description: "Funded from cash remaining after Puresafe and other-products capital.", values: [["Target", recentSetAsideShares?.electricity.target == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.electricity.target)], ["Can set aside", recentSetAsideShares?.electricity.canSetAside == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.electricity.canSetAside)], ["Hours", displayedRecentSetAside.cycleHours.toFixed(2)], ["Rate", formatCurrency(displayedRecentSetAside.electricityCostPerHour)]] },
               miscCapital: { title: "Other-products capital", description: "Funded from cash remaining after Puresafe capital.", values: [["Target", recentSetAsideShares?.otherProducts.target == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.otherProducts.target)], ["Can set aside", recentSetAsideShares?.otherProducts.canSetAside == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.otherProducts.canSetAside)]] },
-              remainingEarnings: { title: "To Stash", description: "Untouched online payments plus cash remaining after all reserve shares.", values: [["Target", recentSetAsideShares?.toStash.target == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.toStash.target)], ["Can set aside", recentSetAsideShares?.toStash.canSetAside == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.toStash.canSetAside)], ["Online payments", formatCurrency(recentSetAsideShares?.toStash.onlinePayments)], ["Cash after reserves", recentSetAsideShares?.toStash.cashAfterReserves == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.toStash.cashAfterReserves)]] },
-              shortfall: { title: "Cash shortfall", description: "How far available cash falls below the required reserves. Online payments are not used to cover it.", values: [["Cash shortfall", recentSetAside.shortfall == null ? "Unable to calculate" : formatCurrency(recentSetAside.shortfall)]] },
+              remainingEarnings: { title: "To Stash", description: "Untouched online payments plus cash remaining after all reserve shares.", values: [["Target", recentSetAsideShares?.toStash.target == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.toStash.target)], ["Can set aside", recentSetAsideShares?.toStash.canSetAside == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.toStash.canSetAside)], ["GCash", formatCurrency(metricsOnlineBreakdown.gcashPayments)], ["Maya", formatCurrency(metricsOnlineBreakdown.mayaPayments)], ...(metricsOnlineBreakdown.otherOnlinePayments > 0 ? [["Other online", formatCurrency(metricsOnlineBreakdown.otherOnlinePayments)] as [string, string]] : []), ["Cash after reserves", recentSetAsideShares?.toStash.cashAfterReserves == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.toStash.cashAfterReserves)]] },
+              shortfall: { title: "Cash shortfall", description: "How far available cash falls below the required reserves. Online payments are not used to cover it.", values: [["Cash shortfall", displayedRecentSetAside.shortfall == null ? "Unable to calculate" : formatCurrency(displayedRecentSetAside.shortfall)]] },
             };
             const selected = detailMap[metric];
             if (selected) setDashboardDetail({ ...selected, route: metricsDetailRoute, routeLabel: "View full cycle" });
@@ -550,10 +557,13 @@ export default function HomePage() {
               actualLabel="Actual total to Stash"
               actualComparisonAvailable={rangeActualComplete}
               hint="Online plus cash left after reserves"
-              onClick={() => showDetail("To Stash", "Target compared with untouched online payments plus cash remaining after all reserve shares.", [["Target", rangeSetAsideShares.toStash.target == null ? "Unable to calculate" : formatCurrency(rangeSetAsideShares.toStash.target)], ["Can set aside", rangeSetAsideShares.toStash.canSetAside == null ? "Unable to calculate" : formatCurrency(rangeSetAsideShares.toStash.canSetAside)], ["Online payments", formatCurrency(rangeSetAsideShares.toStash.onlinePayments)], ["Cash after reserves", rangeSetAsideShares.toStash.cashAfterReserves == null ? "Unable to calculate" : formatCurrency(rangeSetAsideShares.toStash.cashAfterReserves)]])}
+              onClick={() => showDetail("To Stash", "Target compared with untouched online payments plus cash remaining after all reserve shares.", [["Target", rangeSetAsideShares.toStash.target == null ? "Unable to calculate" : formatCurrency(rangeSetAsideShares.toStash.target)], ["Can set aside", rangeSetAsideShares.toStash.canSetAside == null ? "Unable to calculate" : formatCurrency(rangeSetAsideShares.toStash.canSetAside)], ["GCash", formatCurrency(metricsOnlineBreakdown.gcashPayments)], ["Maya", formatCurrency(metricsOnlineBreakdown.mayaPayments)], ...(metricsOnlineBreakdown.otherOnlinePayments > 0 ? [["Other online", formatCurrency(metricsOnlineBreakdown.otherOnlinePayments)] as [string, string]] : []), ["Cash after reserves", rangeSetAsideShares.toStash.cashAfterReserves == null ? "Unable to calculate" : formatCurrency(rangeSetAsideShares.toStash.cashAfterReserves)]])}
             >
                 <StashBreakdown
                   availableOnlinePayments={rangeSetAside.summary.onlineToStash ?? rangeSetAsideShares.toStash.onlinePayments}
+                  gcashPayments={metricsOnlineBreakdown.gcashPayments}
+                  mayaPayments={metricsOnlineBreakdown.mayaPayments}
+                  otherOnlinePayments={metricsOnlineBreakdown.otherOnlinePayments}
                   cashAfterSetAside={rangeSetAsideShares.toStash.cashAfterReserves}
                 />
             </SetAsideShareCard>
@@ -683,7 +693,7 @@ export default function HomePage() {
         }}
       />
 
-      {recentSetAside ? <ActualSetAsideModal isOpen={isActualSetAsideOpen} cycle={recentSetAside} onClose={() => setIsActualSetAsideOpen(false)} onSaved={(saved) => {
+      {displayedRecentSetAside ? <ActualSetAsideModal isOpen={isActualSetAsideOpen} cycle={displayedRecentSetAside} onClose={() => setIsActualSetAsideOpen(false)} onSaved={(saved) => {
         setRecentSetAside(saved);
         toast({ title: "Actual set aside saved", description: "This cycle and the Other Products reserve were updated.", status: "success", position: "top" });
       }}/> : null}

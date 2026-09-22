@@ -342,12 +342,14 @@ export default function CheckBoxPage() {
     const miscellaneousUnits = miscellaneousProductBreakdown.reduce((sum, product) => sum + product.unitsToReplace, 0);
     const missingMiscellaneousCost = miscellaneousProductBreakdown.some((product) => product.capital == null);
     const cashAvailableAfterChangeFloat = Math.max(cashCountedBeforeWithdrawal - closingChangeFloat, 0);
-    const previouslyRecordedOnline = activeCyclePayments?.records
-      .filter((record) => record.channel === "online" && record.source !== "cycle_check_total")
-      .reduce((sum, record) => sum + record.amount, 0) ?? 0;
-    const availableOnlinePayments = previouslyRecordedOnline
-      + parseNumberInput(draft?.gcashCollected ?? "0")
+    const priorOnlineRecords = activeCyclePayments?.records
+      .filter((record) => record.channel === "online" && record.source !== "cycle_check_total") ?? [];
+    const gcashPayments = priorOnlineRecords.filter((record) => record.method === "GCASH").reduce((sum, record) => sum + record.amount, 0)
+      + parseNumberInput(draft?.gcashCollected ?? "0");
+    const mayaPayments = priorOnlineRecords.filter((record) => record.method === "MAYA").reduce((sum, record) => sum + record.amount, 0)
       + parseNumberInput(draft?.mayaCollected ?? "0");
+    const otherOnlinePayments = priorOnlineRecords.filter((record) => record.method !== "GCASH" && record.method !== "MAYA").reduce((sum, record) => sum + record.amount, 0);
+    const availableOnlinePayments = gcashPayments + mayaPayments + otherOnlinePayments;
     const totalAvailable = cashAvailableAfterChangeFloat + availableOnlinePayments;
     const cycleHours = Math.max((Date.now() - new Date(serverDraft.startedAt).getTime()) / 3_600_000, 0);
     const electricityShare = cycleHours * settings.electricityCostPerHour;
@@ -373,6 +375,9 @@ export default function CheckBoxPage() {
       closingChangeFloat,
       cashAvailableAfterChangeFloat,
       availableOnlinePayments,
+      gcashPayments,
+      mayaPayments,
+      otherOnlinePayments,
       totalAvailable,
       puresafeBottlesToReplace: puresafeUnits,
       puresafeCostPerUnit: puresafeProducts[0]?.defaultUnitCost ?? null,

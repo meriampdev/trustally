@@ -35,6 +35,7 @@ begin
   v_detail:=public.save_cycle_set_aside_actual(v_cycle,'0','100','50','30','Counted envelopes');
   if (v_detail#>>'{actualSetAside,otherProductsCapital}')::numeric<>100 then raise exception 'Expected actual Other Products amount of 100'; end if;
   if (v_detail#>>'{actualSetAside,onlineToStash}')::numeric<>40 then raise exception 'Expected all 40 online payments to go to Stash'; end if;
+  if (v_detail->>'gcashPayments')::numeric<>40 or (v_detail->>'mayaPayments')::numeric<>0 then raise exception 'Expected separate GCash and Maya amounts'; end if;
   if (v_detail#>>'{otherProductsReserve,closingBalance}')::numeric<>100 then raise exception 'Expected initial reserve balance of 100'; end if;
 
   insert into public.box_cycles(id,location_id,cycle_number,status,created_by,started_at)
@@ -51,6 +52,8 @@ begin
   if (v_report#>>'{summary,netOtherProductsSetAside}')::numeric<>50 then raise exception 'Expected net set aside of 50'; end if;
   if (v_report#>>'{summary,openingOtherProductsReserve}')::numeric<>0 then raise exception 'Expected opening reserve of 0'; end if;
   if (v_report#>>'{summary,closingOtherProductsReserve}')::numeric<>50 then raise exception 'Expected closing reserve of 50'; end if;
+  if (v_report#>>'{summary,gcashToStash}')::numeric<>40 or (v_report#>>'{summary,mayaToStash}')::numeric<>0 then raise exception 'Expected report GCash and Maya totals'; end if;
+  if v_report#>>'{cycles,0,actualSetAside,otherProductsCapital}' is null then raise exception 'Expected report cycles to include their Actual Set Aside record'; end if;
   select count(*) into v_count from public.expenses e where e.stock_addition_item_id is not null and e.product_id=v_product and e.archived_at is null;
   if v_count<>1 then raise exception 'Expected exactly one automatic restock expense'; end if;
 

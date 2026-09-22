@@ -1,4 +1,4 @@
-import type { CycleSetAside, ReportSetAside } from "./types";
+import type { CyclePaymentRecord, CycleSetAside, ReportSetAside } from "./types";
 
 interface SetAsideFunds {
   cashAvailableAfterChangeFloat: number;
@@ -10,6 +10,20 @@ interface SetAsideShareSource extends SetAsideFunds {
   puresafeCapital: number | null;
   electricityShare: number;
   miscCapital: number | null;
+}
+
+export function summarizeOnlinePayments(records: CyclePaymentRecord[]) {
+  return records.reduce(
+    (summary, record) => {
+      if (record.channel !== "online") return summary;
+      if (record.method === "GCASH") summary.gcashPayments += record.amount;
+      else if (record.method === "MAYA") summary.mayaPayments += record.amount;
+      else summary.otherOnlinePayments += record.amount;
+      summary.onlinePayments += record.amount;
+      return summary;
+    },
+    { gcashPayments: 0, mayaPayments: 0, otherOnlinePayments: 0, onlinePayments: 0 },
+  );
 }
 
 export interface SetAsideShareComparison {
