@@ -57,6 +57,16 @@ begin
   select count(*) into v_count from public.expenses e where e.stock_addition_item_id is not null and e.product_id=v_product and e.archived_at is null;
   if v_count<>1 then raise exception 'Expected exactly one automatic restock expense'; end if;
 
+  update public.box_cycles set opening_change_float=0 where id=v_next_cycle;
+  perform public.record_payment_receipt('75','GCASH','2026-09-12 10:00+08','CURRENT','Recorded before box check','[]',false,v_next_cycle);
+  v_detail:=public.preview_box_check_with_float('0','0','20','0','[]','[]','0',null);
+  if (v_detail#>>'{totals,recordedGcashPayments}')::numeric<>75 then raise exception 'Expected separately recorded GCash of 75 in preview'; end if;
+  if (v_detail#>>'{totals,totalCollected}')::numeric<>95 then raise exception 'Expected entered and separately recorded online payments in preview total'; end if;
+  v_detail:=public.complete_box_check_with_float('0','0','20','0','[]','[]','[]',null,'0',null,'40000000-0000-0000-0000-000000000004');
+  if (select total_collected from public.box_cycles where id=v_next_cycle)<>95 then raise exception 'Expected separately recorded online payment in completed cycle total'; end if;
+  v_detail:=public.get_cycle_payment_detail(v_next_cycle);
+  if (v_detail#>>'{summary,onlinePayments}')::numeric<>95 then raise exception 'Expected payment detail total of 95 without double-counting'; end if;
+
   begin
     perform public.save_cycle_set_aside_actual(v_cycle,'100','100','50','30','Too much cash');
     raise exception 'Expected physical-cash validation to reject the record';

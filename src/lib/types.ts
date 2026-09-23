@@ -222,6 +222,10 @@ export interface CheckBoxPreview {
     cashAddedForChangeNote?: string | null;
     gcashCollected: number;
     mayaCollected: number;
+    recordedOnlinePayments?: number;
+    recordedGcashPayments?: number;
+    recordedMayaPayments?: number;
+    recordedOtherOnlinePayments?: number;
     cogs: number;
     grossProfit: number;
     grossMargin: number | null;

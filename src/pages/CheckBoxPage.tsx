@@ -44,7 +44,7 @@ import {
   formatPercent,
   parseNumberInput,
 } from "../lib/format";
-import { calculateCashOnlySetAside } from "../lib/setAside";
+import { calculateCashOnlySetAside, summarizeOnlinePayments } from "../lib/setAside";
 import {
   CashMovement,
   CheckBoxDraft,
@@ -212,9 +212,13 @@ export default function CheckBoxPage() {
     ? null
     : cashCountedBeforeWithdrawal + cashRemovedSinceLastVisit - openingChangeFloat - cashAddedForChange;
   const cashWithdrawn = cashCountedBeforeWithdrawal - closingChangeFloat;
+  const separatelyRecordedOnline = useMemo(() => summarizeOnlinePayments(
+    activeCyclePayments?.records.filter((record) => record.channel === "online" && record.source !== "cycle_check_total") ?? [],
+  ), [activeCyclePayments]);
   const moneyTotal = (cashGenerated ?? 0)
     + parseNumberInput(draft?.gcashCollected ?? "0")
-    + parseNumberInput(draft?.mayaCollected ?? "0");
+    + parseNumberInput(draft?.mayaCollected ?? "0")
+    + separatelyRecordedOnline.onlinePayments;
 
   const shortfallAmount = preview
     ? Math.max(preview.totals.expectedRevenue - preview.totals.totalCollected, 0)
@@ -342,13 +346,11 @@ export default function CheckBoxPage() {
     const miscellaneousUnits = miscellaneousProductBreakdown.reduce((sum, product) => sum + product.unitsToReplace, 0);
     const missingMiscellaneousCost = miscellaneousProductBreakdown.some((product) => product.capital == null);
     const cashAvailableAfterChangeFloat = Math.max(cashCountedBeforeWithdrawal - closingChangeFloat, 0);
-    const priorOnlineRecords = activeCyclePayments?.records
-      .filter((record) => record.channel === "online" && record.source !== "cycle_check_total") ?? [];
-    const gcashPayments = priorOnlineRecords.filter((record) => record.method === "GCASH").reduce((sum, record) => sum + record.amount, 0)
+    const gcashPayments = separatelyRecordedOnline.gcashPayments
       + parseNumberInput(draft?.gcashCollected ?? "0");
-    const mayaPayments = priorOnlineRecords.filter((record) => record.method === "MAYA").reduce((sum, record) => sum + record.amount, 0)
+    const mayaPayments = separatelyRecordedOnline.mayaPayments
       + parseNumberInput(draft?.mayaCollected ?? "0");
-    const otherOnlinePayments = priorOnlineRecords.filter((record) => record.method !== "GCASH" && record.method !== "MAYA").reduce((sum, record) => sum + record.amount, 0);
+    const otherOnlinePayments = separatelyRecordedOnline.otherOnlinePayments;
     const availableOnlinePayments = gcashPayments + mayaPayments + otherOnlinePayments;
     const totalAvailable = cashAvailableAfterChangeFloat + availableOnlinePayments;
     const cycleHours = Math.max((Date.now() - new Date(serverDraft.startedAt).getTime()) / 3_600_000, 0);
@@ -399,7 +401,7 @@ export default function CheckBoxPage() {
       shortfall: cashOnlySetAside.shortfall,
       settingsSnapshottedAt: null,
     };
-  }, [activeCyclePayments, cashCountedBeforeWithdrawal, closingChangeFloat, draft, products, resolvedPreview, serverDraft, settings]);
+  }, [cashCountedBeforeWithdrawal, closingChangeFloat, draft, products, resolvedPreview, separatelyRecordedOnline, serverDraft, settings]);
 
   if (isLoading) {
     return <Spinner color="brand.400" />;
@@ -678,6 +680,16 @@ export default function CheckBoxPage() {
               }
             />
           </SimpleGrid>
+          {separatelyRecordedOnline.onlinePayments > 0 ? (
+            <Box mt={4} borderRadius="22px" bg="canvas.50" p={4}>
+              <Text fontWeight="800">Online payments already recorded for this cycle</Text>
+              <Text color="canvas.700" mt={1}>
+                GCash {formatCurrency(separatelyRecordedOnline.gcashPayments)} · Maya {formatCurrency(separatelyRecordedOnline.mayaPayments)}
+                {separatelyRecordedOnline.otherOnlinePayments > 0 ? ` · Other ${formatCurrency(separatelyRecordedOnline.otherOnlinePayments)}` : ""}
+              </Text>
+              <Text color="canvas.700" fontSize="sm" mt={1}>Included automatically. Do not enter these amounts again.</Text>
+            </Box>
+          ) : null}
           <SimpleGrid columns={{ base: 2, md: 3 }} spacing={4} mt={4}>
             <MetricCard
               label="Cash generated"
@@ -685,7 +697,7 @@ export default function CheckBoxPage() {
               hint={cashGenerated == null ? "Set the opening change float first" : "Customer cash, separate from the change float"}
             />
             <MetricCard label="Cash withdrawn" value={formatCurrency(cashWithdrawn)} hint="Total counted less Left for Change" />
-            <MetricCard label="Total customer payments" value={formatCurrency(moneyTotal)} hint="Cash generated + GCash + Maya" />
+            <MetricCard label="Total customer payments" value={formatCurrency(moneyTotal)} hint="Cash generated + entered online + previously recorded online" />
           </SimpleGrid>
           <Button mt={5} onClick={() => setStep(1)}>
             Next: count bottles
@@ -866,6 +878,9 @@ export default function CheckBoxPage() {
               <Text>Cash generated {formatCurrency(resolvedPreview.totals.cashGenerated)}</Text>
               <Text>GCash {formatCurrency(resolvedPreview.totals.gcashCollected)}</Text>
               <Text>Maya {formatCurrency(resolvedPreview.totals.mayaCollected)}</Text>
+              <Text>Previously recorded GCash {formatCurrency(resolvedPreview.totals.recordedGcashPayments ?? separatelyRecordedOnline.gcashPayments)}</Text>
+              <Text>Previously recorded Maya {formatCurrency(resolvedPreview.totals.recordedMayaPayments ?? separatelyRecordedOnline.mayaPayments)}</Text>
+              {(resolvedPreview.totals.recordedOtherOnlinePayments ?? separatelyRecordedOnline.otherOnlinePayments) > 0 ? <Text>Previously recorded other online {formatCurrency(resolvedPreview.totals.recordedOtherOnlinePayments ?? separatelyRecordedOnline.otherOnlinePayments)}</Text> : null}
               <Text>Opening change float {formatCurrency(resolvedPreview.totals.openingChangeFloat)}</Text>
               <Text>Total cash counted {formatCurrency(resolvedPreview.totals.cashCountedBeforeWithdrawal)}</Text>
               <Text>Left for Change {formatCurrency(resolvedPreview.totals.closingChangeFloat)}</Text>
