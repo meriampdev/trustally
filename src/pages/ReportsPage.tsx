@@ -103,6 +103,8 @@ export default function ReportsPage() {
     { Metric: "Known pay-later", Value: formatCurrency(snapshot.summary.knownPayLater) },
     { Metric: "Unaccounted", Value: formatCurrency(snapshot.summary.unaccountedAmount) },
     { Metric: "Actual physical set aside", Value: setAside.summary.actualPhysicalTotal == null ? "Not recorded" : formatCurrency(setAside.summary.actualPhysicalTotal) },
+    { Metric: "Contingency target", Value: formatCurrency(setAside.summary.contingencyCapital ?? 0) },
+    { Metric: "Actual contingency savings", Value: setAside.summary.actualContingency == null ? "Not recorded" : formatCurrency(setAside.summary.actualContingency) },
     { Metric: "Other Products used for restocks", Value: setAside.summary.usedForOtherProductRestocks == null ? "Not tracked" : formatCurrency(setAside.summary.usedForOtherProductRestocks) },
     { Metric: "Other Products net set aside", Value: setAside.summary.netOtherProductsSetAside == null ? "Not tracked" : formatCurrency(setAside.summary.netOtherProductsSetAside) },
     { Metric: "Opening Other Products reserve", Value: setAside.summary.openingOtherProductsReserve == null ? "Not tracked" : formatCurrency(setAside.summary.openingOtherProductsReserve) },
@@ -174,6 +176,7 @@ export default function ReportsPage() {
           <SetAsideShareCard label="Puresafe Capital" target={setAsideShares.puresafe.target} canSetAside={setAsideShares.puresafe.canSetAside} showActual actual={setAside.summary.actualPuresafeCapital ?? null} actualComparisonAvailable={actualSetAsideComplete} hint="View target and actual by cycle" onClick={() => setDetailView("puresafeCapital")} />
           <SetAsideShareCard label="Other Products Capital" target={setAsideShares.otherProducts.target} canSetAside={setAsideShares.otherProducts.canSetAside} showActual actual={setAside.summary.actualOtherProductsCapital ?? null} actualComparisonAvailable={actualSetAsideComplete} hint="View target, actual, and reserve by cycle" onClick={() => setDetailView("miscCapital")}><Text>Used for restocks: {setAside.summary.usedForOtherProductRestocks == null ? "Not tracked" : formatCurrency(setAside.summary.usedForOtherProductRestocks)}</Text><Text>Net set aside: {setAside.summary.netOtherProductsSetAside == null ? "Not tracked" : formatCurrency(setAside.summary.netOtherProductsSetAside)}</Text><Text>Reserve: {setAside.summary.openingOtherProductsReserve == null ? "Not tracked" : formatCurrency(setAside.summary.openingOtherProductsReserve)} opening · {setAside.summary.closingOtherProductsReserve == null ? "Not tracked" : formatCurrency(setAside.summary.closingOtherProductsReserve)} closing</Text></SetAsideShareCard>
           <SetAsideShareCard label="Electricity Share" target={setAsideShares.electricity.target} canSetAside={setAsideShares.electricity.canSetAside} showActual actual={setAside.summary.actualElectricityShare ?? null} actualComparisonAvailable={actualSetAsideComplete} hint="View target and actual by cycle" onClick={() => setDetailView("electricityShare")} />
+          <SetAsideShareCard label="Contingency Savings" target={setAsideShares.contingency.target} canSetAside={setAsideShares.contingency.canSetAside} showActual actual={setAside.summary.actualContingency ?? null} actualComparisonAvailable={actualSetAsideComplete} hint="Redirected from funds that reached their goals" onClick={() => setDetailView("contingencyCapital")}><Text>Saved: {formatCurrency(setAside.summary.fundBalances?.contingency.balance ?? 0)}</Text></SetAsideShareCard>
           <MetricCard label="Cash shortfall" value={setAside.summary.shortfall == null ? "Unable to calculate" : formatCurrency(setAside.summary.shortfall)} hint="Reserves not covered by cash" onClick={() => setDetailView("shortfall")} />
           <SetAsideShareCard label="To Stash" target={setAsideShares.toStash.target} canSetAside={setAsideShares.toStash.canSetAside} showActual actual={actualToStashTotal} actualLabel="Actual total to Stash" actualComparisonAvailable={actualSetAsideComplete} hint="Online payments plus recorded physical cash" onClick={() => setDetailView("remainingEarnings")}>
             <StashBreakdown availableOnlinePayments={setAside.summary.onlineToStash ?? setAsideShares.toStash.onlinePayments} gcashPayments={onlineBreakdown.gcashPayments} mayaPayments={onlineBreakdown.mayaPayments} otherOnlinePayments={onlineBreakdown.otherOnlinePayments} cashAfterSetAside={setAsideShares.toStash.cashAfterReserves} />
@@ -388,6 +391,7 @@ const detailTitles: Record<string, string> = {
   grossMargin: "Gross margin details",
   puresafeCapital: "Puresafe capital by cycle",
   electricityShare: "Electricity share by cycle",
+  contingencyCapital: "Contingency savings by cycle",
   miscCapital: "Other-products capital by cycle",
   totalCapital: "Total capital by cycle",
   totalSetAside: "Target set aside by cycle",
@@ -469,7 +473,7 @@ function ReportDetailContent({ detailView, snapshot, setAside, viewMode }: { det
   const records = filter ? snapshot.reportBottleRecords.filter(filter) : [];
   const cycleKeys = new Set(["immediateCollected", "totalPayments", "cashPayments", "onlinePayments", "bottlesTaken", "expectedRevenue", "disclosure", "unattributed", "collection", "paymentRequired", "payLater", "outstanding"]);
   const financialKeys = new Set(["salesRevenue", "capitalUsed", "grossProfit", "grossMargin"]);
-  const setAsideKeys = new Set(["puresafeCapital", "electricityShare", "miscCapital", "totalCapital", "totalSetAside", "remainingEarnings", "cashAvailableAfterChangeFloat", "availableOnlinePayments", "totalAvailable", "shortfall"]);
+  const setAsideKeys = new Set(["puresafeCapital", "electricityShare", "miscCapital", "contingencyCapital", "totalCapital", "totalSetAside", "remainingEarnings", "cashAvailableAfterChangeFloat", "availableOnlinePayments", "totalAvailable", "shortfall"]);
   const cashFloatKeys = new Set(["cashCounted", "cashGenerated", "cashWithdrawn", "unknownOpeningFloats"]);
 
   return (
@@ -550,6 +554,7 @@ function SetAsideBreakdown({ cycles, cyclePaymentRecords, detailView, viewMode }
         const values: Record<string, string> = {
           puresafeCapital: `${shareComparison.puresafe.target == null ? "Unable to calculate" : formatCurrency(shareComparison.puresafe.target)} target · ${cycle.actualSetAside ? formatCurrency(cycle.actualSetAside.puresafeCapital) : "Not recorded"} actual`,
           electricityShare: `${formatCurrency(shareComparison.electricity.target)} target · ${cycle.actualSetAside ? formatCurrency(cycle.actualSetAside.electricityShare) : "Not recorded"} actual`,
+          contingencyCapital: `${formatCurrency(shareComparison.contingency.target)} target · ${cycle.actualSetAside ? formatCurrency(cycle.actualSetAside.contingency) : "Not recorded"} actual`,
           miscCapital: `${shareComparison.otherProducts.target == null ? "Unable to calculate" : formatCurrency(shareComparison.otherProducts.target)} target · ${cycle.actualSetAside ? formatCurrency(cycle.actualSetAside.otherProductsCapital) : "Not recorded"} actual · ${cycle.otherProductsReserve?.usedForRestocks == null ? "Not tracked" : formatCurrency(cycle.otherProductsReserve.usedForRestocks)} used · ${cycle.otherProductsReserve?.closingBalance == null ? "Not tracked" : formatCurrency(cycle.otherProductsReserve.closingBalance)} closing reserve`,
           totalCapital: totalCapital == null ? "Unable to calculate" : formatCurrency(totalCapital),
           totalSetAside: cycle.totalSetAside == null ? "Unable to calculate" : formatCurrency(cycle.totalSetAside),

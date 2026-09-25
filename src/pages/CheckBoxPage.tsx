@@ -117,6 +117,7 @@ export default function CheckBoxPage() {
   const [cashMovements, setCashMovements] = useState<CashMovement[]>([]);
   const [payLaterBalances, setPayLaterBalances] = useState<PayLaterBalance[]>([]);
   const [activeCyclePayments, setActiveCyclePayments] = useState<CyclePaymentDetail | null>(null);
+  const [activeFundBalances, setActiveFundBalances] = useState<CycleSetAside["fundBalances"]>();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [completedCycleSetAside, setCompletedCycleSetAside] = useState<CycleSetAside | null>(null);
   const [isActualSetAsideOpen, setIsActualSetAsideOpen] = useState(false);
@@ -156,7 +157,17 @@ export default function CheckBoxPage() {
       setCashMovements(nextCashMovements);
       setPayLaterBalances(nextPayLaterBalances);
       setSettings(nextSettings);
-      setActiveCyclePayments(nextDraft ? await fetchCyclePaymentDetail(nextDraft.cycleId) : null);
+      if (nextDraft) {
+        const [cyclePayments, cycleSetAside] = await Promise.all([
+          fetchCyclePaymentDetail(nextDraft.cycleId),
+          fetchCycleSetAside(nextDraft.cycleId),
+        ]);
+        setActiveCyclePayments(cyclePayments);
+        setActiveFundBalances(cycleSetAside.fundBalances);
+      } else {
+        setActiveCyclePayments(null);
+        setActiveFundBalances(undefined);
+      }
 
       if (nextDraft) {
         const latestLegacyClosing = nextCashMovements
@@ -327,7 +338,7 @@ export default function CheckBoxPage() {
     };
     const puresafeUnits = puresafeProducts.reduce((sum, product) => sum + replacementUnitsFor(product), 0);
     const missingPuresafeCost = puresafeProducts.some((product) => replacementUnitsFor(product) > 0 && product.defaultUnitCost <= 0);
-    const puresafeCapital = missingPuresafeCost
+    const originalPuresafeCapital = missingPuresafeCost
       ? null
       : puresafeProducts.reduce((sum, product) => sum + replacementUnitsFor(product) * product.defaultUnitCost, 0);
     const miscellaneousProductBreakdown = otherProducts
@@ -354,13 +365,19 @@ export default function CheckBoxPage() {
     const availableOnlinePayments = gcashPayments + mayaPayments + otherOnlinePayments;
     const totalAvailable = cashAvailableAfterChangeFloat + availableOnlinePayments;
     const cycleHours = Math.max((Date.now() - new Date(serverDraft.startedAt).getTime()) / 3_600_000, 0);
-    const electricityShare = cycleHours * settings.electricityCostPerHour;
-    const miscCapital = missingMiscellaneousCost
+    const originalElectricityShare = cycleHours * settings.electricityCostPerHour;
+    const originalMiscCapital = missingMiscellaneousCost
       ? null
       : miscellaneousProductBreakdown.reduce((sum, product) => sum + (product.capital ?? 0), 0);
+    const puresafeCapital = originalPuresafeCapital == null ? null : Math.min(originalPuresafeCapital, activeFundBalances?.puresafe.remaining ?? originalPuresafeCapital);
+    const miscCapital = originalMiscCapital == null ? null : Math.min(originalMiscCapital, activeFundBalances?.otherProducts.remaining ?? originalMiscCapital);
+    const electricityShare = Math.min(originalElectricityShare, activeFundBalances?.electricity.remaining ?? originalElectricityShare);
+    const contingencyCapital = (originalPuresafeCapital == null || puresafeCapital == null ? 0 : originalPuresafeCapital - puresafeCapital)
+      + (originalMiscCapital == null || miscCapital == null ? 0 : originalMiscCapital - miscCapital)
+      + (originalElectricityShare - electricityShare);
     const totalSetAside = puresafeCapital == null || miscCapital == null
       ? null
-      : puresafeCapital + electricityShare + miscCapital;
+      : puresafeCapital + electricityShare + miscCapital + contingencyCapital;
     const cashOnlySetAside = calculateCashOnlySetAside({
       cashAvailableAfterChangeFloat,
       availableOnlinePayments,
@@ -384,15 +401,19 @@ export default function CheckBoxPage() {
       puresafeBottlesToReplace: puresafeUnits,
       puresafeCostPerUnit: puresafeProducts[0]?.defaultUnitCost ?? null,
       puresafeCapital,
+      originalPuresafeCapital,
       puresafeProductId: puresafeProducts[0]?.id ?? null,
       missingPuresafeCost,
       cycleHours,
       electricityCostPerHour: settings.electricityCostPerHour,
       electricityShare,
+      originalElectricityShare,
       miscCapitalType: "automatic",
       fixedMiscCapital: 0,
       miscCapitalPercentage: 0,
       miscCapital,
+      originalMiscCapital,
+      contingencyCapital,
       miscellaneousBottlesToReplace: miscellaneousUnits,
       missingMiscellaneousCost,
       miscellaneousProductBreakdown,
@@ -400,8 +421,9 @@ export default function CheckBoxPage() {
       remainingEarnings: cashOnlySetAside.remainingEarnings,
       shortfall: cashOnlySetAside.shortfall,
       settingsSnapshottedAt: null,
+      fundBalances: activeFundBalances,
     };
-  }, [cashCountedBeforeWithdrawal, closingChangeFloat, draft, products, resolvedPreview, separatelyRecordedOnline, serverDraft, settings]);
+  }, [activeFundBalances, cashCountedBeforeWithdrawal, closingChangeFloat, draft, products, resolvedPreview, separatelyRecordedOnline, serverDraft, settings]);
 
   if (isLoading) {
     return <Spinner color="brand.400" />;

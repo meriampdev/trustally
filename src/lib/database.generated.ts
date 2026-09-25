@@ -136,6 +136,7 @@ export interface DisclosureCollectionDatabaseTypes {
         p_actual_puresafe_capital: string;
         p_actual_other_products_capital: string;
         p_actual_electricity_share: string;
+        p_actual_contingency: string;
         p_actual_to_stash_cash: string;
         p_note?: string | null;
       };

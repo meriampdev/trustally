@@ -15,7 +15,7 @@ export function SetAsideSummary({ value, onMetricClick, onRecordActual }: { valu
   const reserve = value.otherProductsReserve;
   const showActual = !value.isEstimate;
   const totalTargets = shares.puresafe.target == null || shares.otherProducts.target == null || shares.toStash.target == null
-    ? null : shares.puresafe.target + shares.otherProducts.target + shares.electricity.target + shares.toStash.target;
+    ? null : shares.puresafe.target + shares.otherProducts.target + shares.electricity.target + shares.contingency.target + shares.toStash.target;
 
   return (
     <Stack spacing={4}>
@@ -29,11 +29,19 @@ export function SetAsideSummary({ value, onMetricClick, onRecordActual }: { valu
       </SimpleGrid> : null}
       <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={4}>
         <MetricCard label="Cash available for reserves" value={formatCurrency(value.cashAvailableAfterChangeFloat)} hint="After preserving the change float" onClick={onMetricClick ? () => onMetricClick("cashAvailableAfterChangeFloat") : undefined} />
-        <SetAsideShareCard label="Puresafe Capital" target={shares.puresafe.target} canSetAside={shares.puresafe.canSetAside} showActual={showActual} actual={actual?.puresafeCapital ?? null} onClick={onMetricClick ? () => onMetricClick("puresafeCapital") : undefined} />
+        <SetAsideShareCard label="Puresafe Capital" target={shares.puresafe.target} canSetAside={shares.puresafe.canSetAside} showActual={showActual} actual={actual?.puresafeCapital ?? null} onClick={onMetricClick ? () => onMetricClick("puresafeCapital") : undefined}>
+          {value.fundBalances ? <Text>Fund: {formatCurrency(value.fundBalances.puresafe.balance)} / {formatCurrency(value.fundBalances.puresafe.goal)}{value.fundBalances.puresafe.goalMet ? " · Goal met" : ""}</Text> : null}
+        </SetAsideShareCard>
         <SetAsideShareCard label="Other Products Capital" target={shares.otherProducts.target} canSetAside={shares.otherProducts.canSetAside} showActual={showActual} actual={actual?.otherProductsCapital ?? null} onClick={onMetricClick ? () => onMetricClick("miscCapital") : undefined}>
+          {value.fundBalances ? <Text>Fund: {formatCurrency(value.fundBalances.otherProducts.balance)} / {formatCurrency(value.fundBalances.otherProducts.goal)}{value.fundBalances.otherProducts.goalMet ? " · Goal met" : ""}</Text> : null}
           {reserve ? <Stack spacing={0.5}><Text>Used for restocks: {reserve.usedForRestocks == null ? "Not tracked yet" : formatCurrency(reserve.usedForRestocks)}</Text><Text>Net set aside: {reserve.netSetAside == null ? "Not recorded" : formatCurrency(reserve.netSetAside)}</Text><Text>Reserve: {reserve.openingBalance == null ? "Not tracked" : formatCurrency(reserve.openingBalance)} opening · {reserve.closingBalance == null ? "Not tracked" : formatCurrency(reserve.closingBalance)} closing</Text></Stack> : null}
         </SetAsideShareCard>
-        <SetAsideShareCard label="Electricity Share" target={shares.electricity.target} canSetAside={shares.electricity.canSetAside} showActual={showActual} actual={actual?.electricityShare ?? null} hint={value.isEstimate ? "Estimated for the active cycle" : undefined} onClick={onMetricClick ? () => onMetricClick("electricityShare") : undefined} />
+        <SetAsideShareCard label="Electricity Share" target={shares.electricity.target} canSetAside={shares.electricity.canSetAside} showActual={showActual} actual={actual?.electricityShare ?? null} hint={value.isEstimate ? "Estimated for the active cycle" : undefined} onClick={onMetricClick ? () => onMetricClick("electricityShare") : undefined}>
+          {value.fundBalances ? <Text>Fund: {formatCurrency(value.fundBalances.electricity.balance)} / {formatCurrency(value.fundBalances.electricity.goal)}{value.fundBalances.electricity.goalMet ? " · Goal met" : ""}</Text> : null}
+        </SetAsideShareCard>
+        <SetAsideShareCard label="Contingency Savings" target={shares.contingency.target} canSetAside={shares.contingency.canSetAside} showActual={showActual} actual={actual?.contingency ?? null} hint="Receives contributions redirected from funds that reached their goals" onClick={onMetricClick ? () => onMetricClick("contingencyCapital") : undefined}>
+          {value.fundBalances ? <Text>Saved: {formatCurrency(value.fundBalances.contingency.balance)}</Text> : null}
+        </SetAsideShareCard>
         <MetricCard label="Cash shortfall" value={shortfallValue} hint="Reserves not covered by available cash" onClick={onMetricClick ? () => onMetricClick("shortfall") : undefined} />
         <SetAsideShareCard
           label="To Stash"
@@ -60,7 +68,7 @@ export function SetAsideSummary({ value, onMetricClick, onRecordActual }: { valu
       <Box bg="canvas.50" borderRadius="20px" p={4}>
         <Text fontWeight="900">Calculation</Text>
         <Text color="canvas.700" mt={1}>
-          Set aside is deducted from cash only in this priority: Puresafe, other products, then electricity. Online payments remain untouched.
+          Set aside is deducted from cash only in this priority: Puresafe, other products, electricity, then contingency. Once a fund reaches its goal, that fund's normal contribution is redirected to contingency. Online payments remain untouched.
         </Text>
         {value.missingPuresafeCost ? (
           <Stack mt={2} spacing={2}>
@@ -69,13 +77,13 @@ export function SetAsideSummary({ value, onMetricClick, onRecordActual }: { valu
           </Stack>
         ) : (
           <Text color="canvas.700" mt={1}>
-            Puresafe: {value.puresafeBottlesToReplace} bottle{value.puresafeBottlesToReplace === 1 ? "" : "s"} × {formatCurrency(value.puresafeCostPerUnit ?? 0)} = {formatCurrency(value.puresafeCapital)}
+            Puresafe need: {value.puresafeBottlesToReplace} bottle{value.puresafeBottlesToReplace === 1 ? "" : "s"} × {formatCurrency(value.puresafeCostPerUnit ?? 0)} = {formatCurrency(value.originalPuresafeCapital ?? value.puresafeCapital)} · This cycle's Puresafe target: {formatCurrency(value.puresafeCapital)}
           </Text>
         )}
         <Text color="canvas.700" mt={1}>
           {value.missingMiscellaneousCost
             ? "Other products: Unable to calculate because at least one depleted product has no unit cost"
-            : `Other products: ${value.miscellaneousBottlesToReplace ?? 0} bottle${value.miscellaneousBottlesToReplace === 1 ? "" : "s"} to replace = ${formatCurrency(value.miscCapital)}`}
+            : `Other products need: ${value.miscellaneousBottlesToReplace ?? 0} bottle${value.miscellaneousBottlesToReplace === 1 ? "" : "s"} to replace = ${formatCurrency(value.originalMiscCapital ?? value.miscCapital)} · This cycle's target: ${formatCurrency(value.miscCapital)}`}
         </Text>
         {value.miscellaneousProductBreakdown?.map((product) => (
           <Text key={product.productId} color="canvas.700" mt={1} pl={3}>
@@ -86,8 +94,9 @@ export function SetAsideSummary({ value, onMetricClick, onRecordActual }: { valu
           <Button as={Link} to="/products" size="sm" variant="outline" mt={3}>Complete product costs</Button>
         ) : null}
         <Text color="canvas.700" mt={1}>
-          Electricity: {value.cycleHours.toFixed(2)} hours × {formatCurrency(value.electricityCostPerHour)} = {formatCurrency(value.electricityShare)}{value.isEstimate ? " (Estimated)" : ""}
+          Electricity need: {value.cycleHours.toFixed(2)} hours × {formatCurrency(value.electricityCostPerHour)} = {formatCurrency(value.originalElectricityShare ?? value.electricityShare)} · This cycle's target: {formatCurrency(value.electricityShare)}{value.isEstimate ? " (Estimated)" : ""}
         </Text>
+        {(value.contingencyCapital ?? 0) > 0 ? <Text color="canvas.700" mt={1}>Redirected to contingency: {formatCurrency(value.contingencyCapital)}</Text> : null}
         {cashAfterSetAside != null ? (
           <Stack spacing={1} mt={2} color="canvas.700">
             <Text>Cash after set aside: {formatCurrency(cashAfterSetAside)} · GCash to Stash: {formatCurrency(value.gcashPayments ?? 0)} · Maya to Stash: {formatCurrency(value.mayaPayments ?? 0)}{(value.otherOnlinePayments ?? 0) > 0 ? ` · Other online: ${formatCurrency(value.otherOnlinePayments ?? 0)}` : ""}</Text>

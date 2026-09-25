@@ -20,6 +20,7 @@ export function ActualSetAsideModal({ isOpen, cycle, onClose, onSaved }: Props) 
   const [puresafe, setPuresafe] = useState("");
   const [otherProducts, setOtherProducts] = useState("");
   const [electricity, setElectricity] = useState("");
+  const [contingency, setContingency] = useState("");
   const [toStashCash, setToStashCash] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
@@ -32,16 +33,17 @@ export function ActualSetAsideModal({ isOpen, cycle, onClose, onSaved }: Props) 
     setPuresafe(actual ? String(actual.puresafeCapital) : "");
     setOtherProducts(actual ? String(actual.otherProductsCapital) : "");
     setElectricity(actual ? String(actual.electricityShare) : "");
+    setContingency(actual ? String(actual.contingency ?? 0) : "");
     setToStashCash(actual ? String(actual.toStashCash) : "");
     setNote(actual?.note ?? "");
     setError("");
   }, [cycle, isOpen]);
 
-  const physicalTotal = useMemo(() => [puresafe, otherProducts, electricity, toStashCash]
-    .reduce((sum, value) => sum + parseNumberInput(value), 0), [puresafe, otherProducts, electricity, toStashCash]);
+  const physicalTotal = useMemo(() => [puresafe, otherProducts, electricity, contingency, toStashCash]
+    .reduce((sum, value) => sum + parseNumberInput(value), 0), [puresafe, otherProducts, electricity, contingency, toStashCash]);
   const remainingCash = cycle.cashAvailableAfterChangeFloat - physicalTotal;
-  const allEntered = [puresafe, otherProducts, electricity, toStashCash].every((value) => value.trim() !== "");
-  const allValid = [puresafe, otherProducts, electricity, toStashCash].every((value) => Number.isFinite(Number(value)) && Number(value) >= 0);
+  const allEntered = [puresafe, otherProducts, electricity, contingency, toStashCash].every((value) => value.trim() !== "");
+  const allValid = [puresafe, otherProducts, electricity, contingency, toStashCash].every((value) => Number.isFinite(Number(value)) && Number(value) >= 0);
 
   async function save() {
     if (!allEntered) { setError("Enter every physical-cash amount. Use 0 when no cash was placed in a share."); return; }
@@ -49,7 +51,7 @@ export function ActualSetAsideModal({ isOpen, cycle, onClose, onSaved }: Props) 
     if (physicalTotal > cycle.cashAvailableAfterChangeFloat + 0.001) { setError("The total cannot exceed the physical cash available after Change Float."); return; }
     setIsSaving(true); setError("");
     try {
-      const saved = await saveCycleSetAsideActual({ cycleId: cycle.cycleId, puresafeCapital: puresafe, otherProductsCapital: otherProducts, electricityShare: electricity, toStashCash, note });
+      const saved = await saveCycleSetAsideActual({ cycleId: cycle.cycleId, puresafeCapital: puresafe, otherProductsCapital: otherProducts, electricityShare: electricity, contingency, toStashCash, note });
       onSaved(saved); onClose();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save the actual set aside."); }
     finally { setIsSaving(false); }
@@ -70,6 +72,7 @@ export function ActualSetAsideModal({ isOpen, cycle, onClose, onSaved }: Props) 
           <AmountField label="Puresafe Capital" target={targets.puresafe.target} value={puresafe} onChange={setPuresafe}/>
           <AmountField label="Other Products Capital" target={targets.otherProducts.target} value={otherProducts} onChange={setOtherProducts}/>
           <AmountField label="Electricity Share" target={targets.electricity.target} value={electricity} onChange={setElectricity}/>
+          <AmountField label="Contingency Savings" target={targets.contingency.target} value={contingency} onChange={setContingency}/>
           <AmountField label="To Stash — physical cash" target={targets.toStash.cashAfterReserves} value={toStashCash} onChange={setToStashCash}/>
         </SimpleGrid>
         <Box bg="canvas.50" borderRadius="20px" p={4}>

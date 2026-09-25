@@ -10,6 +10,7 @@ interface SetAsideShareSource extends SetAsideFunds {
   puresafeCapital: number | null;
   electricityShare: number;
   miscCapital: number | null;
+  contingencyCapital?: number;
 }
 
 export function summarizeOnlinePayments(records: CyclePaymentRecord[]) {
@@ -30,6 +31,7 @@ export interface SetAsideShareComparison {
   puresafe: { target: number | null; canSetAside: number | null };
   electricity: { target: number; canSetAside: number | null };
   otherProducts: { target: number | null; canSetAside: number | null };
+  contingency: { target: number; canSetAside: number | null };
   toStash: {
     target: number | null;
     canSetAside: number | null;
@@ -77,9 +79,15 @@ export function calculateSetAsideShareComparison(value: SetAsideShareSource): Se
     : Math.min(remainingCash, value.electricityShare);
   if (electricityCanSetAside != null) remainingCash -= electricityCanSetAside;
 
+  const contingencyTarget = value.contingencyCapital ?? 0;
+  const contingencyCanSetAside = electricityCanSetAside == null
+    ? null
+    : Math.min(remainingCash, contingencyTarget);
+  if (contingencyCanSetAside != null) remainingCash -= contingencyCanSetAside;
+
   const totalReserveTarget = value.puresafeCapital == null || value.miscCapital == null
     ? null
-    : value.puresafeCapital + value.electricityShare + value.miscCapital;
+    : value.puresafeCapital + value.electricityShare + value.miscCapital + contingencyTarget;
   const targetToStash = totalReserveTarget != null
     ? Math.max(
         value.cashAvailableAfterChangeFloat
@@ -88,12 +96,13 @@ export function calculateSetAsideShareComparison(value: SetAsideShareSource): Se
         0,
       )
     : null;
-  const cashAfterReserves = electricityCanSetAside == null ? null : remainingCash;
+  const cashAfterReserves = contingencyCanSetAside == null ? null : remainingCash;
 
   return {
     puresafe: { target: value.puresafeCapital, canSetAside: puresafeCanSetAside },
     electricity: { target: value.electricityShare, canSetAside: electricityCanSetAside },
     otherProducts: { target: value.miscCapital, canSetAside: otherProductsCanSetAside },
+    contingency: { target: contingencyTarget, canSetAside: contingencyCanSetAside },
     toStash: {
       target: targetToStash,
       canSetAside: cashAfterReserves == null ? null : value.availableOnlinePayments + cashAfterReserves,
@@ -124,6 +133,10 @@ export function calculateReportSetAsideShareComparison(value: ReportSetAside): S
     otherProducts: {
       target: sumNullable(comparisons.map((item) => item.otherProducts.target)),
       canSetAside: sumNullable(comparisons.map((item) => item.otherProducts.canSetAside)),
+    },
+    contingency: {
+      target: comparisons.reduce((sum, item) => sum + item.contingency.target, 0),
+      canSetAside: sumNullable(comparisons.map((item) => item.contingency.canSetAside)),
     },
     toStash: {
       target: sumNullable(comparisons.map((item) => item.toStash.target)),

@@ -32,7 +32,7 @@ begin
 
   v_detail:=public.get_cycle_set_aside(v_cycle);
   if v_detail->>'actualSetAside' is not null then raise exception 'Old completed cycle should be Not recorded'; end if;
-  v_detail:=public.save_cycle_set_aside_actual(v_cycle,'0','100','50','30','Counted envelopes');
+  v_detail:=public.save_cycle_set_aside_actual(v_cycle,'0','100','50','0','30','Counted envelopes');
   if (v_detail#>>'{actualSetAside,otherProductsCapital}')::numeric<>100 then raise exception 'Expected actual Other Products amount of 100'; end if;
   if (v_detail#>>'{actualSetAside,onlineToStash}')::numeric<>40 then raise exception 'Expected all 40 online payments to go to Stash'; end if;
   if (v_detail->>'gcashPayments')::numeric<>40 or (v_detail->>'mayaPayments')::numeric<>0 then raise exception 'Expected separate GCash and Maya amounts'; end if;
@@ -68,7 +68,7 @@ begin
   if (v_detail#>>'{summary,onlinePayments}')::numeric<>95 then raise exception 'Expected payment detail total of 95 without double-counting'; end if;
 
   begin
-    perform public.save_cycle_set_aside_actual(v_cycle,'100','100','50','30','Too much cash');
+    perform public.save_cycle_set_aside_actual(v_cycle,'100','100','50','0','30','Too much cash');
     raise exception 'Expected physical-cash validation to reject the record';
   exception when others then
     if sqlerrm not like 'Actual set aside cannot exceed%' then raise; end if;

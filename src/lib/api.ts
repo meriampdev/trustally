@@ -475,6 +475,7 @@ export async function saveCycleSetAsideActual(input: ActualSetAsideInput) {
       p_actual_puresafe_capital: input.puresafeCapital,
       p_actual_other_products_capital: input.otherProductsCapital,
       p_actual_electricity_share: input.electricityShare,
+      p_actual_contingency: input.contingency,
       p_actual_to_stash_cash: input.toStashCash,
       p_note: input.note?.trim() || null,
     });

@@ -566,6 +566,10 @@ export interface CycleSetAside {
   fixedMiscCapital: number;
   miscCapitalPercentage: number;
   miscCapital: number | null;
+  contingencyCapital?: number;
+  originalPuresafeCapital?: number | null;
+  originalMiscCapital?: number | null;
+  originalElectricityShare?: number;
   miscellaneousBottlesToReplace?: number;
   missingMiscellaneousCost?: boolean;
   miscellaneousProductBreakdown?: Array<{
@@ -584,6 +588,7 @@ export interface CycleSetAside {
     puresafeCapital: number;
     otherProductsCapital: number;
     electricityShare: number;
+    contingency: number;
     toStashCash: number;
     onlineToStash: number;
     toStashTotal: number;
@@ -599,6 +604,13 @@ export interface CycleSetAside {
     netSetAside: number | null;
     openingBalance: number | null;
     closingBalance: number | null;
+  };
+  fundBalances?: {
+    trackingStartedAt: string | null;
+    puresafe: { goal: number; balance: number; remaining: number; goalMet: boolean; used?: number };
+    otherProducts: { goal: number; balance: number; remaining: number; goalMet: boolean; used?: number };
+    electricity: { goal: number; balance: number; remaining: number; goalMet: boolean };
+    contingency: { balance: number };
   };
 }
 
@@ -618,6 +630,8 @@ export interface ReportSetAside {
     actualPuresafeCapital?: number | null;
     actualOtherProductsCapital?: number | null;
     actualElectricityShare?: number | null;
+    contingencyCapital?: number;
+    actualContingency?: number | null;
     actualToStashCash?: number | null;
     actualPhysicalTotal?: number | null;
     onlineToStash?: number;
@@ -631,6 +645,7 @@ export interface ReportSetAside {
     reserveTrackingStartedAt?: string | null;
     actualRecordedCycles?: number;
     actualUnrecordedCycles?: number;
+    fundBalances?: CycleSetAside["fundBalances"];
   };
   cycles: CycleSetAside[];
 }
@@ -640,6 +655,7 @@ export interface ActualSetAsideInput {
   puresafeCapital: string;
   otherProductsCapital: string;
   electricityShare: string;
+  contingency: string;
   toStashCash: string;
   note?: string;
 }
