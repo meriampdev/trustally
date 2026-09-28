@@ -148,7 +148,7 @@ export default function HomePage() {
 
   const visibleProducts = useMemo(
     () => products
-      .filter((product) => product.active || (product.lastKnownQuantity ?? 0) > 0)
+      .filter((product) => (product.lastKnownQuantity ?? 0) > 0)
       .sort((left, right) => (right.lastKnownQuantity ?? 0) - (left.lastKnownQuantity ?? 0)),
     [products],
   );
@@ -179,7 +179,12 @@ export default function HomePage() {
     (sum, product) => sum + (product.lastKnownQuantity ?? 0) * product.currentSellingPrice,
     0,
   );
+  const boxCapital = visibleProducts.reduce(
+    (sum, product) => sum + (product.lastKnownQuantity ?? 0) * product.defaultUnitCost,
+    0,
+  );
   const retailValue = (dashboard.currentCycle?.retailValue ?? 0) || derivedRetail;
+  const boxProfit = retailValue - boxCapital;
   const recent = dashboard.recentResult;
   const collected = payments?.summary.totalPayments ?? recent?.totalCollected ?? 0;
   const online = payments ? summarizeOnlinePayments(payments.records) : null;
@@ -277,10 +282,11 @@ export default function HomePage() {
   return (
     <Stack spacing={5}>
       <SectionCard eyebrow="Current cycle" title={`Cycle ${dashboard.currentCycle?.cycleNumber ?? ""}`}>
-        <SimpleGrid columns={{ base: 2, md: 3 }} spacing={3}>
+        <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3}>
           <CompactValue label="Last checked" value={lastCheckedAt ? formatDateTimeLabel(lastCheckedAt) : "Not checked"} />
           <CompactValue label="Running" value={dashboard.currentCycle?.startedAt ? formatDurationFromNow(dashboard.currentCycle.startedAt) : "—"} />
           <CompactValue label="Retail value" value={formatCurrency(retailValue)} />
+          <CompactValue label="Profit" value={formatCurrency(boxProfit)} />
         </SimpleGrid>
         <HStack mt={4} spacing={3} overflowX="auto" pb={1}>
           <Button onClick={() => setIsContentsOpen(true)} variant="outline" flexShrink={0}>Box contents</Button>
@@ -397,9 +403,15 @@ export default function HomePage() {
           <ModalBody>
             <Stack spacing={3}>
               {visibleProducts.map((product) => (
-                <HStack key={product.id} justify="space-between" bg="canvas.50" borderRadius="18px" p={3}>
-                  <Box><Text fontWeight="800">{product.displayName}</Text><Text fontSize="sm" color="canvas.700">{formatCurrency(product.currentSellingPrice)} each</Text></Box>
-                  <Text fontWeight="900">{product.lastKnownQuantity ?? 0}</Text>
+                <HStack key={product.id} justify="space-between" bg="canvas.50" borderRadius="18px" p={3} width={'100%'}>
+                  <Box minW={0} width={'100%'}>
+                    <Text fontWeight="800">{product.displayName}</Text>
+                    <Text fontSize="sm" color="canvas.700">{product.lastKnownQuantity ?? 0} in box · {formatCurrency(product.currentSellingPrice)} each</Text>
+                    <HStack spacing={4} mt={2} align="start" width={'100%'} justify={'space-between'}>
+                      <MiniValue label="Capital" value={formatCurrency((product.lastKnownQuantity ?? 0) * product.defaultUnitCost)} />
+                      <MiniValue label="Profit" value={formatCurrency((product.lastKnownQuantity ?? 0) * (product.currentSellingPrice - product.defaultUnitCost))} />
+                    </HStack>
+                  </Box>
                 </HStack>
               ))}
             </Stack>
@@ -469,7 +481,7 @@ function MiniValue({ label, value }: { label: string; value: string }) {
 function CompactTotalCard({ label, value }: { label: string; value: string }) {
   return (
     <Box minW={0} bg="canvas.50" borderRadius="22px" p={{ base: 3, sm: 4 }}>
-      <Text color="canvas.700" fontSize="xs" textTransform="uppercase" letterSpacing="0.08em" lineHeight="short">
+      <Text color="canvas.700" fontSize="11px" textTransform="uppercase" letterSpacing="0.08em" lineHeight="short">
         {label}
       </Text>
       <Text mt={2} fontSize={{ base: "lg", sm: "2xl" }} fontWeight="900" lineHeight="short" overflowWrap="anywhere">
