@@ -995,7 +995,7 @@ function reconcileReportCashPayments(
 ): ReportPaymentDetail {
   const floatsByCycle = new Map(floats.cycles.map((float) => [float.cycleId, float]));
   const records = payments.records.map((record) => {
-    const float = floatsByCycle.get(record.cycleId);
+    const float = record.cycleId ? floatsByCycle.get(record.cycleId) : undefined;
     if (record.channel !== "cash" || record.source !== "cycle_check_total" || float?.cashGenerated == null) return record;
     return {
       ...record,
