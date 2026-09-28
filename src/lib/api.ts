@@ -87,6 +87,18 @@ export async function saveExpense(input: ExpenseInput) {
   }
 }
 
+export async function reconcileReserveCash(input: {
+  reserveKind: "PURESAFE" | "OTHER_PRODUCTS" | "ELECTRICITY" | "CONTINGENCY";
+  cashOnHand: string;
+  note: string;
+}) {
+  return rpc<CycleSetAside["fundBalances"]>("reconcile_reserve_cash", {
+    p_reserve_kind: input.reserveKind,
+    p_cash_on_hand: input.cashOnHand,
+    p_note: input.note.trim(),
+  });
+}
+
 export async function archiveExpense(expenseId: string) {
   try {
     return await rpc<{ id: string; archived: boolean }>("archive_expense", { p_expense_id: expenseId });

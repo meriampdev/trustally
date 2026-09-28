@@ -19,10 +19,11 @@ import {
 } from "@chakra-ui/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ActualSetAsideModal } from "../components/ActualSetAsideModal";
 import { DateRangeModal } from "../components/DateRangeModal";
 import { MetricCard } from "../components/MetricCard";
+import { ReserveCashModal } from "../components/ReserveCashModal";
 import { SectionCard } from "../components/SectionCard";
+import { StashRecordModal } from "../components/StashRecordModal";
 import { useCurrentLocation } from "../lib/location";
 import {
   fetchCyclePaymentDetail,
@@ -36,7 +37,7 @@ import { formatCurrency, formatDateTimeLabel, formatDurationFromNow } from "../l
 import { formatReportDateRange } from "../lib/reportRange";
 import { calculateSetAsideShareComparison, summarizeOnlinePayments } from "../lib/setAside";
 import type { ReportRangeKey } from "../lib/reportRange";
-import type { CyclePaymentDetail, CycleSetAside, HomeDashboard, Product, ReportSetAside } from "../lib/types";
+import type { CyclePaymentDetail, CycleSetAside, HomeDashboard, Product, ReportSetAside, ReserveKind } from "../lib/types";
 
 type StashRange = "latest" | Extract<ReportRangeKey, "7d" | "30d" | "custom">;
 
@@ -57,8 +58,10 @@ type DashboardDetail = {
 
 type ReserveRow = {
   key: string;
+  reserveKind: ReserveKind;
   label: string;
   goal: number | null;
+  cycleTarget: number | null;
   actual: number | null;
   remaining: number | null;
   detail: DashboardDetail;
@@ -74,7 +77,8 @@ export default function HomePage() {
   const [setAside, setSetAside] = useState<CycleSetAside | null>(null);
   const [detail, setDetail] = useState<DashboardDetail | null>(null);
   const [isContentsOpen, setIsContentsOpen] = useState(false);
-  const [isActualOpen, setIsActualOpen] = useState(false);
+  const [selectedReserve, setSelectedReserve] = useState<ReserveRow | null>(null);
+  const [isStashRecordOpen, setIsStashRecordOpen] = useState(false);
   const [stashRange, setStashRange] = useState<StashRange>("latest");
   const [stashStartDate, setStashStartDate] = useState("");
   const [stashEndDate, setStashEndDate] = useState("");
@@ -195,8 +199,10 @@ export default function HomePage() {
   const reserveRows: ReserveRow[] = setAside && shareComparison ? [
     reserveRow(
       "puresafe",
+      "PURESAFE",
       "Puresafe",
       fundBalances?.puresafe.goal ?? setAside.puresafeReserveGoalSnapshot ?? shareComparison.puresafe.target,
+      shareComparison.puresafe.target,
       fundBalances?.puresafe.physicalBalance ?? actual?.puresafeCapital,
       null,
       [
@@ -208,8 +214,10 @@ export default function HomePage() {
     ),
     reserveRow(
       "other-products",
+      "OTHER_PRODUCTS",
       "Other Products",
       fundBalances?.otherProducts.goal ?? setAside.otherProductsReserveGoalSnapshot ?? shareComparison.otherProducts.target,
+      shareComparison.otherProducts.target,
       fundBalances?.otherProducts.physicalBalance ?? actual?.otherProductsCapital,
       null,
       [
@@ -222,8 +230,10 @@ export default function HomePage() {
     ),
     reserveRow(
       "electricity",
+      "ELECTRICITY",
       "Electricity",
       fundBalances?.electricity.goal ?? setAside.electricityReserveGoalSnapshot ?? shareComparison.electricity.target,
+      shareComparison.electricity.target,
       fundBalances?.electricity.physicalBalance ?? actual?.electricityShare,
       null,
       [
@@ -236,7 +246,9 @@ export default function HomePage() {
     ),
     reserveRow(
       "savings",
+      "CONTINGENCY",
       "Savings",
+      shareComparison.contingency.target,
       shareComparison.contingency.target,
       fundBalances?.contingency.physicalBalance ?? actual?.contingency ?? null,
       null,
@@ -321,10 +333,11 @@ export default function HomePage() {
                 bg="canvas.50"
                 borderRadius="22px"
                 justifyContent="stretch"
-                onClick={() => setDetail(row.detail)}
+                onClick={() => setSelectedReserve(row)}
               >
                 <Box width="100%" textAlign="left">
                   <Text fontWeight="900">{row.label}</Text>
+                  <Text color="canvas.700" fontSize="sm" mt={1}>This cycle target: {moneyOrNotRecorded(row.cycleTarget)}</Text>
                   <SimpleGrid columns={3} spacing={2} mt={2}>
                     <MiniValue label="Goal" value={moneyOrNotRecorded(row.goal)} />
                     <MiniValue label="Cash on hand" value={moneyOrNotRecorded(row.actual)} />
@@ -341,14 +354,18 @@ export default function HomePage() {
                 </Box>
               </Button>
             ))}
-            <Button onClick={() => setIsActualOpen(true)}>
-              {actual ? "Update actual set aside" : "Record actual set aside"}
-            </Button>
           </Stack>
         ) : <Text color="canvas.700">Set-aside details will appear after the first completed check.</Text>}
       </SectionCard>
 
       <SectionCard eyebrow="To Stash" title="Cash and online payments">
+        <HStack mb={4} justify="space-between" align="end" spacing={3}>
+          <Box minW={0}>
+            <Text color="canvas.700" fontSize="sm">Latest cycle target</Text>
+            <Text fontWeight="900">{moneyOrNotRecorded(shareComparison?.toStash.target)}</Text>
+          </Box>
+          <Button onClick={() => setIsStashRecordOpen(true)} isDisabled={!setAside} flexShrink={0}>Record</Button>
+        </HStack>
         <Box overflowX="auto" maxW="100%" pb={1}>
           <HStack spacing={2} width="max-content">
             {stashRangeOptions.map((option) => (
@@ -441,15 +458,33 @@ export default function HomePage() {
         </ModalContent>
       </Modal>
 
-      {setAside ? (
-        <ActualSetAsideModal
-          isOpen={isActualOpen}
+      {selectedReserve && currentLocationId && setAside ? (
+        <ReserveCashModal
+          isOpen
+          reserveKind={selectedReserve.reserveKind}
+          label={selectedReserve.label}
+          currentCash={selectedReserve.actual ?? 0}
           cycle={setAside}
-          onClose={() => setIsActualOpen(false)}
+          cycleTarget={selectedReserve.cycleTarget}
+          locationId={currentLocationId}
+          onClose={() => setSelectedReserve(null)}
+          onSaved={async (saved) => {
+            if (saved) setSetAside(saved);
+            await load();
+            toast({ title: `${selectedReserve.label} cash updated`, status: "success", position: "top" });
+          }}
+        />
+      ) : null}
+
+      {setAside ? (
+        <StashRecordModal
+          isOpen={isStashRecordOpen}
+          cycle={setAside}
+          onClose={() => setIsStashRecordOpen(false)}
           onSaved={(saved) => {
             setSetAside(saved);
-            setIsActualOpen(false);
-            toast({ title: "Actual set aside saved", status: "success", position: "top" });
+            setStashRange("latest");
+            toast({ title: "To Stash recorded", status: "success", position: "top" });
           }}
         />
       ) : null}
@@ -502,8 +537,10 @@ function progressPercent(actual?: number | null, goal?: number | null) {
 
 function reserveRow(
   key: string,
+  reserveKind: ReserveKind,
   label: string,
   goal: number | null | undefined,
+  cycleTarget: number | null | undefined,
   actual: number | null | undefined,
   remaining: number | null | undefined,
   values: Array<[string, string]>,
@@ -512,8 +549,10 @@ function reserveRow(
   const resolvedGoal = goal ?? null;
   return {
     key,
+    reserveKind,
     label,
     goal: resolvedGoal,
+    cycleTarget: cycleTarget ?? null,
     actual: resolvedActual,
     remaining: remaining ?? (resolvedActual == null || resolvedGoal == null ? null : Math.max(resolvedGoal - resolvedActual, 0)),
     detail: { title: label, values },
