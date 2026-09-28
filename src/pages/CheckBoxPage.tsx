@@ -60,7 +60,7 @@ import {
     Settings,
   } from "../lib/types";
 
-const steps = ["Money", "Count", "Results", "Refill", "Done"];
+const steps = ["Money", "Bottles", "Non-sale", "Difference", "Refill & review", "Set aside"];
 
 const nonSaleReasonOptions: NonSaleReason[] = [
   "OWNER_USE",
@@ -222,15 +222,9 @@ export default function CheckBoxPage() {
   const cashGenerated = openingChangeFloat == null
     ? null
     : cashCountedBeforeWithdrawal + cashRemovedSinceLastVisit - openingChangeFloat - cashAddedForChange;
-  const cashWithdrawn = cashCountedBeforeWithdrawal - closingChangeFloat;
   const separatelyRecordedOnline = useMemo(() => summarizeOnlinePayments(
     activeCyclePayments?.records.filter((record) => record.channel === "online" && record.source !== "cycle_check_total") ?? [],
   ), [activeCyclePayments]);
-  const moneyTotal = (cashGenerated ?? 0)
-    + parseNumberInput(draft?.gcashCollected ?? "0")
-    + parseNumberInput(draft?.mayaCollected ?? "0")
-    + separatelyRecordedOnline.onlinePayments;
-
   const shortfallAmount = preview
     ? Math.max(preview.totals.expectedRevenue - preview.totals.totalCollected, 0)
     : 0;
@@ -361,8 +355,14 @@ export default function CheckBoxPage() {
       + parseNumberInput(draft?.gcashCollected ?? "0");
     const mayaPayments = separatelyRecordedOnline.mayaPayments
       + parseNumberInput(draft?.mayaCollected ?? "0");
+    const unionbankPayments = separatelyRecordedOnline.unionbankPayments
+      + parseNumberInput(draft?.unionbankCollected ?? "0");
+    const bpiPayments = separatelyRecordedOnline.bpiPayments
+      + parseNumberInput(draft?.bpiCollected ?? "0");
+    const legacyBankPayments = separatelyRecordedOnline.legacyBankPayments;
     const otherOnlinePayments = separatelyRecordedOnline.otherOnlinePayments;
-    const availableOnlinePayments = gcashPayments + mayaPayments + otherOnlinePayments;
+    const eligibleOnlineReservePayments = mayaPayments + unionbankPayments + bpiPayments + legacyBankPayments;
+    const availableOnlinePayments = gcashPayments + eligibleOnlineReservePayments + otherOnlinePayments;
     const totalAvailable = cashAvailableAfterChangeFloat + availableOnlinePayments;
     const cycleHours = Math.max((Date.now() - new Date(serverDraft.startedAt).getTime()) / 3_600_000, 0);
     const originalElectricityShare = cycleHours * settings.electricityCostPerHour;
@@ -381,6 +381,7 @@ export default function CheckBoxPage() {
     const cashOnlySetAside = calculateCashOnlySetAside({
       cashAvailableAfterChangeFloat,
       availableOnlinePayments,
+      eligibleOnlineReservePayments,
       totalSetAside,
     });
 
@@ -396,6 +397,9 @@ export default function CheckBoxPage() {
       availableOnlinePayments,
       gcashPayments,
       mayaPayments,
+      unionbankPayments,
+      bpiPayments,
+      legacyBankPayments,
       otherOnlinePayments,
       totalAvailable,
       puresafeBottlesToReplace: puresafeUnits,
@@ -479,6 +483,8 @@ export default function CheckBoxPage() {
         cashAddedForChangeNote: activeDraft.cashAddedForChangeNote,
         gcashCollected: activeDraft.gcashCollected,
         mayaCollected: activeDraft.mayaCollected,
+        unionbankCollected: activeDraft.unionbankCollected,
+        bpiCollected: activeDraft.bpiCollected,
         counts: activeServerDraft.items.map((item) => ({
           productId: item.productId,
           endingQuantity: activeDraft.counts[item.productId] ?? "0",
@@ -486,7 +492,7 @@ export default function CheckBoxPage() {
         nonSaleRemovals: activeDraft.nonSaleRemovals,
       });
       setPreview(nextPreview);
-      setStep(2);
+      setStep(3);
     } catch (error) {
       toast({
         title: "Could not preview this box check",
@@ -515,6 +521,8 @@ export default function CheckBoxPage() {
         cashAddedForChangeNote: activeDraft.cashAddedForChangeNote,
         gcashCollected: activeDraft.gcashCollected,
         mayaCollected: activeDraft.mayaCollected,
+        unionbankCollected: activeDraft.unionbankCollected,
+        bpiCollected: activeDraft.bpiCollected,
         counts: activeServerDraft.items.map((item) => ({
           productId: item.productId,
           endingQuantity: activeDraft.counts[item.productId] ?? "0",
@@ -544,7 +552,7 @@ export default function CheckBoxPage() {
 
       clearCheckBoxDraft(activeDraft.cycleId);
       setPreview(result.preview);
-      setStep(4);
+      setStep(5);
       void fetchCycleSetAside(result.completedCycleId).then(setCompletedCycleSetAside).catch((error) => {
         toast({ title: "Cycle completed, but Set Aside could not load", description: error instanceof Error ? error.message : "Open the completed cycle from History to record it later.", status: "warning", position: "top" });
       });
@@ -588,11 +596,11 @@ export default function CheckBoxPage() {
   }
 
   function goToStep(nextStep: number) {
-    if (nextStep < 0 || nextStep > step) {
+    if (step === 5 || nextStep < 0 || nextStep > step) {
       return;
     }
 
-    if (nextStep === 2 && !resolvedPreview) {
+    if (nextStep === 3 && !resolvedPreview) {
       return;
     }
 
@@ -602,28 +610,29 @@ export default function CheckBoxPage() {
   return (
     <Stack spacing={5}>
       <SectionCard eyebrow="Progress" title={`Step ${step + 1} of ${steps.length}`}>
-        <HStack spacing={2} flexWrap="wrap">
-          {steps.map((label, index) => (
-            <Button
-              key={label}
-              onClick={() => goToStep(index)}
-              isDisabled={index > step || (index === 2 && !resolvedPreview)}
-              variant={index <= step ? "solid" : "ghost"}
-              px={4}
-              py={2}
-              borderRadius="full"
-              bg={index <= step ? "brand.400" : "canvas.200"}
-              color={index <= step ? "white" : "canvas.700"}
-              fontWeight="800"
-              _hover={{
-                bg: index <= step ? "brand.500" : "canvas.300",
-              }}
-            >
-              {label}
-            </Button>
-          ))}
-        </HStack>
-        <HStack mt={4} spacing={3} flexWrap="wrap">
+        <Box overflowX="auto" maxW="100%" pb={1}>
+          <HStack spacing={2} width="max-content">
+            {steps.map((label, index) => (
+              <Button
+                key={label}
+                onClick={() => goToStep(index)}
+                isDisabled={step === 5 || index > step || (index === 3 && !resolvedPreview)}
+                variant={index <= step ? "solid" : "ghost"}
+                px={4}
+                py={2}
+                borderRadius="full"
+                bg={index <= step ? "brand.400" : "canvas.200"}
+                color={index <= step ? "white" : "canvas.700"}
+                fontWeight="800"
+                flexShrink={0}
+                _hover={{ bg: index <= step ? "brand.500" : "canvas.300" }}
+              >
+                {label}
+              </Button>
+            ))}
+          </HStack>
+        </Box>
+        {step < 5 ? <HStack mt={4} spacing={3} flexWrap="wrap">
           {step > 0 ? (
             <Button variant="outline" onClick={() => goToStep(step - 1)}>
               Back one step
@@ -632,7 +641,7 @@ export default function CheckBoxPage() {
           <Button variant="ghost" onClick={handleReset}>
             Reset this check
           </Button>
-        </HStack>
+        </HStack> : null}
       </SectionCard>
 
       {step === 0 ? (
@@ -701,28 +710,30 @@ export default function CheckBoxPage() {
                 updateDraft(setDraft, setPreview, { mayaCollected: value })
               }
             />
+            <MoneyInput
+              label="UnionBank"
+              value={draft.unionbankCollected}
+              onChange={(value) => updateDraft(setDraft, setPreview, { unionbankCollected: value })}
+            />
+            <MoneyInput
+              label="BPI"
+              value={draft.bpiCollected}
+              onChange={(value) => updateDraft(setDraft, setPreview, { bpiCollected: value })}
+            />
           </SimpleGrid>
           {separatelyRecordedOnline.onlinePayments > 0 ? (
             <Box mt={4} borderRadius="22px" bg="canvas.50" p={4}>
               <Text fontWeight="800">Online payments already recorded for this cycle</Text>
               <Text color="canvas.700" mt={1}>
-                GCash {formatCurrency(separatelyRecordedOnline.gcashPayments)} · Maya {formatCurrency(separatelyRecordedOnline.mayaPayments)}
+                GCash {formatCurrency(separatelyRecordedOnline.gcashPayments)} · Maya {formatCurrency(separatelyRecordedOnline.mayaPayments)} · UnionBank {formatCurrency(separatelyRecordedOnline.unionbankPayments)} · BPI {formatCurrency(separatelyRecordedOnline.bpiPayments)}
+                {separatelyRecordedOnline.legacyBankPayments > 0 ? ` · Bank ${formatCurrency(separatelyRecordedOnline.legacyBankPayments)}` : ""}
                 {separatelyRecordedOnline.otherOnlinePayments > 0 ? ` · Other ${formatCurrency(separatelyRecordedOnline.otherOnlinePayments)}` : ""}
               </Text>
               <Text color="canvas.700" fontSize="sm" mt={1}>Included automatically. Do not enter these amounts again.</Text>
             </Box>
           ) : null}
-          <SimpleGrid columns={{ base: 2, md: 3 }} spacing={4} mt={4}>
-            <MetricCard
-              label="Cash generated"
-              value={cashGenerated == null ? "Cannot be determined" : formatCurrency(cashGenerated)}
-              hint={cashGenerated == null ? "Set the opening change float first" : "Customer cash, separate from the change float"}
-            />
-            <MetricCard label="Cash withdrawn" value={formatCurrency(cashWithdrawn)} hint="Total counted less Left for Change" />
-            <MetricCard label="Total customer payments" value={formatCurrency(moneyTotal)} hint="Cash generated + entered online + previously recorded online" />
-          </SimpleGrid>
           <Button mt={5} onClick={() => setStep(1)}>
-            Next: count bottles
+            Next: remaining bottles
           </Button>
         </SectionCard>
       ) : null}
@@ -756,9 +767,15 @@ export default function CheckBoxPage() {
             </Stack>
           </SectionCard>
 
+          <Button onClick={() => setStep(2)}>Next: non-sale removals</Button>
+        </Stack>
+      ) : null}
+
+      {step === 2 ? (
+        <Stack spacing={5}>
           <SectionCard
-            eyebrow="Something doesn’t look right?"
-            title="Record non-sale removals before you preview the results."
+            eyebrow="Non-sale removals"
+            title="Did any bottles leave without a sale?"
           >
             <Stack spacing={4}>
               {draft.nonSaleRemovals.map((item) => (
@@ -820,55 +837,38 @@ export default function CheckBoxPage() {
               >
                 Add non-sale removal
               </Button>
+              {draft.nonSaleRemovals.length === 0 ? (
+                <Text color="canvas.700">Nothing to record? Continue to review the difference.</Text>
+              ) : null}
             </Stack>
           </SectionCard>
 
           <Button onClick={() => void handlePreview()} isLoading={isPreviewLoading}>
-            See results
+            Next: review difference
           </Button>
         </Stack>
       ) : null}
 
-      {step === 2 && resolvedPreview ? (
+      {step === 3 && resolvedPreview ? (
         <Stack spacing={5}>
-          <SectionCard eyebrow="Box check" title={resolvedPreview.dateLabel}>
-            <SimpleGrid columns={{ base: 2, md: 3, xl: 6 }} spacing={4}>
+          <SectionCard eyebrow="Difference" title="Review what the check found">
+            <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4}>
               <MetricCard
-                label="Expected from bottles taken"
+                label="Expected sales"
                 value={formatCurrency(resolvedPreview.totals.expectedRevenue)}
               />
               <MetricCard
-                label="Money received this period"
+                label="Payments collected"
                 value={formatCurrency(resolvedPreview.totals.immediatePayments)}
               />
               <MetricCard
-                label="Current difference"
-                value={formatCurrency(resolvedPreview.totals.differenceAmount)}
-              />
-              <MetricCard
-                label="Known pay-later"
-                value={formatCurrency(resolvedPreview.totals.knownPayLater)}
-                hint={
-                  pendingPayLaterAmount > 0
-                    ? `${formatCurrency(recordedPayLaterAmount)} already recorded + ${formatCurrency(pendingPayLaterAmount)} to add`
-                    : recordedPayLaterAmount > 0
-                      ? "From recorded pay-later balances"
-                      : "No pay-later recorded yet"
-                }
-              />
-              <MetricCard
-                label="Unaccounted"
+                label="Unexplained gap"
                 value={formatCurrency(resolvedPreview.totals.unaccountedAmount)}
-              />
-              <MetricCard
-                label="Accounted rate"
-                value={formatPercent(resolvedPreview.totals.accountedRate)}
-                hint="After known pay-later amounts"
               />
             </SimpleGrid>
           </SectionCard>
 
-          <SectionCard eyebrow="Settlement" title="What is already settled vs still outstanding?">
+          <SectionCard title="Settlement details" collapsible defaultExpanded={false}>
             <SimpleGrid columns={{ base: 1, md: 4 }} spacing={4}>
               <MetricCard
                 label="Settled now"
@@ -895,13 +895,17 @@ export default function CheckBoxPage() {
             </SimpleGrid>
           </SectionCard>
 
-          <SectionCard eyebrow="Payment breakdown" title="Money collected">
+          <SectionCard title="Payment details" collapsible defaultExpanded={false}>
             <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
               <Text>Cash generated {formatCurrency(resolvedPreview.totals.cashGenerated)}</Text>
               <Text>GCash {formatCurrency(resolvedPreview.totals.gcashCollected)}</Text>
               <Text>Maya {formatCurrency(resolvedPreview.totals.mayaCollected)}</Text>
+              <Text>UnionBank {formatCurrency(resolvedPreview.totals.unionbankCollected ?? 0)}</Text>
+              <Text>BPI {formatCurrency(resolvedPreview.totals.bpiCollected ?? 0)}</Text>
               <Text>Previously recorded GCash {formatCurrency(resolvedPreview.totals.recordedGcashPayments ?? separatelyRecordedOnline.gcashPayments)}</Text>
               <Text>Previously recorded Maya {formatCurrency(resolvedPreview.totals.recordedMayaPayments ?? separatelyRecordedOnline.mayaPayments)}</Text>
+              <Text>Previously recorded UnionBank {formatCurrency(resolvedPreview.totals.recordedUnionbankPayments ?? separatelyRecordedOnline.unionbankPayments)}</Text>
+              <Text>Previously recorded BPI {formatCurrency(resolvedPreview.totals.recordedBpiPayments ?? separatelyRecordedOnline.bpiPayments)}</Text>
               {(resolvedPreview.totals.recordedOtherOnlinePayments ?? separatelyRecordedOnline.otherOnlinePayments) > 0 ? <Text>Previously recorded other online {formatCurrency(resolvedPreview.totals.recordedOtherOnlinePayments ?? separatelyRecordedOnline.otherOnlinePayments)}</Text> : null}
               <Text>Opening change float {formatCurrency(resolvedPreview.totals.openingChangeFloat)}</Text>
               <Text>Total cash counted {formatCurrency(resolvedPreview.totals.cashCountedBeforeWithdrawal)}</Text>
@@ -913,7 +917,7 @@ export default function CheckBoxPage() {
           </SectionCard>
 
           {liveSetAside ? (
-            <SectionCard eyebrow="Set Aside" title="Automatic reserve estimate">
+            <SectionCard title="Set-aside calculation" collapsible defaultExpanded={false}>
               <SetAsideSummary value={liveSetAside} />
             </SectionCard>
           ) : null}
@@ -1085,7 +1089,7 @@ export default function CheckBoxPage() {
             </SectionCard>
           ) : null}
 
-          <SectionCard eyebrow="Product breakdown" title="What happened this cycle">
+          <SectionCard title="Product details" collapsible defaultExpanded={false}>
             <Stack spacing={3}>
               {resolvedPreview.productBreakdown.map((item) => (
                 <Box key={item.productId} bg="canvas.50" borderRadius="24px" p={4}>
@@ -1099,19 +1103,26 @@ export default function CheckBoxPage() {
           </SectionCard>
 
           <HStack spacing={3} flexWrap="wrap">
-            <Button onClick={() => setStep(3)}>Continue</Button>
-            <Button variant="outline" onClick={() => setStep(1)}>
-              Something doesn’t look right
+            <Button onClick={() => setStep(4)}>Next: refill and review</Button>
+            <Button variant="outline" onClick={() => setStep(2)}>
+              Correct counts or removals
             </Button>
           </HStack>
         </Stack>
       ) : null}
 
-      {step === 3 ? (
+      {step === 4 && resolvedPreview ? (
         <Stack spacing={5}>
+          <SectionCard eyebrow="Final review" title="Ready to save this check?">
+            <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3}>
+              <MetricCard label="Expected" value={formatCurrency(resolvedPreview.totals.expectedRevenue)} />
+              <MetricCard label="Collected" value={formatCurrency(resolvedPreview.totals.immediatePayments)} />
+              <MetricCard label="Unexplained" value={formatCurrency(resolvedPreview.totals.unaccountedAmount)} />
+            </SimpleGrid>
+          </SectionCard>
           <SectionCard
-            eyebrow="Refill the box?"
-            title="Add anything you’re putting back before the next cycle starts."
+            eyebrow="Optional refill"
+            title="Add stock for the next cycle"
           >
             <Stack spacing={4}>
               {draft.refillItems.map((item, index) => (
@@ -1202,52 +1213,23 @@ export default function CheckBoxPage() {
         </Stack>
       ) : null}
 
-      {step === 4 && resolvedPreview ? (
+      {step === 5 && resolvedPreview ? (
         <Stack spacing={5}>
-        <SectionCard eyebrow="Box check complete" title="Next cycle is ready.">
-          <SimpleGrid columns={{ base: 2, md: 3, xl: 6 }} spacing={4}>
-            <MetricCard
-              label="Expected"
-              value={formatCurrency(resolvedPreview.totals.expectedRevenue)}
-            />
-            <MetricCard
-              label="Received"
-              value={formatCurrency(resolvedPreview.totals.immediatePayments)}
-            />
-              <MetricCard
-                label="Known pay-later"
-                value={formatCurrency(resolvedPreview.totals.knownPayLater)}
-                hint={
-                  pendingPayLaterAmount > 0
-                    ? `${formatCurrency(recordedPayLaterAmount)} already recorded + ${formatCurrency(pendingPayLaterAmount)} added here`
-                    : undefined
-                }
-              />
-            <MetricCard
-              label="Outstanding"
-              value={formatCurrency(resolvedPreview.totals.outstandingAmount)}
-            />
-            <MetricCard
-              label="Accounted"
-              value={formatPercent(resolvedPreview.totals.accountedRate)}
-            />
-            <MetricCard
-              label="Settled"
-              value={formatPercent(resolvedPreview.totals.settledRate)}
-            />
-          </SimpleGrid>
-          <Button mt={5} onClick={() => navigate("/")}>
-            Done
-          </Button>
-        </SectionCard>
-        {completedCycleSetAside ? <SectionCard eyebrow="Actual Set Aside" title="Record the physical cash you separated">
-          <SetAsideSummary value={completedCycleSetAside} onRecordActual={() => setIsActualSetAsideOpen(true)}/>
-        </SectionCard> : null}
+          <SectionCard eyebrow="Box check complete" title="Record what you physically set aside">
+            <Text color="canvas.700">The next cycle has started. This set-aside record belongs only to the check you just completed.</Text>
+            {completedCycleSetAside ? (
+              <Button mt={4} onClick={() => setIsActualSetAsideOpen(true)}>
+                {completedCycleSetAside.actualSetAside ? "Update actual set aside" : "Record actual set aside"}
+              </Button>
+            ) : <Spinner mt={4} color="brand.400" />}
+            <Button mt={3} variant="outline" onClick={() => navigate("/")}>Finish</Button>
+          </SectionCard>
         </Stack>
       ) : null}
 
       {completedCycleSetAside ? <ActualSetAsideModal isOpen={isActualSetAsideOpen} cycle={completedCycleSetAside} onClose={() => setIsActualSetAsideOpen(false)} onSaved={(saved) => {
         setCompletedCycleSetAside(saved);
+        setIsActualSetAsideOpen(false);
         toast({ title: "Actual set aside saved", description: "The cycle and Other Products reserve are now updated.", status: "success", position: "top" });
       }}/> : null}
 
@@ -1286,6 +1268,8 @@ function createInitialDraft(payload: CheckBoxDraftPayload, legacyClosingChangeFl
     cashAddedForChangeNote: "",
     gcashCollected: "0",
     mayaCollected: "0",
+    unionbankCollected: "0",
+    bpiCollected: "0",
     counts: Object.fromEntries(
       payload.items.map((item) => [item.productId, String(item.beforeQuantity)]),
     ),
@@ -1303,6 +1287,8 @@ function normalizeDraft(draft: CheckBoxDraft): CheckBoxDraft {
     closingChangeFloat: draft.closingChangeFloat ?? "0",
     cashAddedForChange: draft.cashAddedForChange ?? "0",
     cashAddedForChangeNote: draft.cashAddedForChangeNote ?? "",
+    unionbankCollected: draft.unionbankCollected ?? "0",
+    bpiCollected: draft.bpiCollected ?? "0",
     differenceResolution: {
       ...createEmptyDifferenceResolution(),
       ...draft.differenceResolution,

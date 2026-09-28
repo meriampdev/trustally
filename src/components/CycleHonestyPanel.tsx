@@ -77,7 +77,7 @@ interface PaymentFormState {
   id: string | null;
   occurredAt: string;
   amount: string;
-  method: "GCASH" | "MAYA" | "BANK" | "OTHER";
+  method: "GCASH" | "MAYA" | "UNIONBANK" | "BPI" | "BANK" | "OTHER";
   personLabel: string;
   referenceNumber: string;
   note: string;
@@ -458,7 +458,7 @@ export function CycleHonestyPanel({ cycle, paymentDetail, onDetailsChange }: Cyc
                 <Field label="Actual payment date and time"><Input type="datetime-local" value={paymentForm.occurredAt} onChange={(event) => setPaymentForm((current) => ({ ...current, occurredAt: event.target.value }))} /></Field>
                 <DetectedCycleField detection={paymentDetection} />
                 <Field label="Amount"><Input inputMode="decimal" value={paymentForm.amount} onChange={(event) => setPaymentForm((current) => ({ ...current, amount: event.target.value }))} /></Field>
-                <Field label="Method"><Select value={paymentForm.method} onChange={(event) => setPaymentForm((current) => ({ ...current, method: event.target.value as PaymentFormState["method"] }))}><option value="GCASH">GCash</option><option value="MAYA">Maya</option><option value="BANK">Bank transfer</option><option value="OTHER">Other online</option></Select></Field>
+                <Field label="Method"><Select value={paymentForm.method} onChange={(event) => setPaymentForm((current) => ({ ...current, method: event.target.value as PaymentFormState["method"] }))}><option value="GCASH">GCash</option><option value="MAYA">Maya</option><option value="UNIONBANK">UnionBank</option><option value="BPI">BPI</option><option value="BANK">Legacy bank transfer</option><option value="OTHER">Other online</option></Select></Field>
                 <Field label="Person (optional)"><Input value={paymentForm.personLabel} onChange={(event) => setPaymentForm((current) => ({ ...current, personLabel: event.target.value }))} /></Field>
                 <Field label="Reference number (optional)"><Input value={paymentForm.referenceNumber} onChange={(event) => setPaymentForm((current) => ({ ...current, referenceNumber: event.target.value }))} /></Field>
                 <Field label="Notes (optional)"><Textarea value={paymentForm.note} onChange={(event) => setPaymentForm((current) => ({ ...current, note: event.target.value }))} /></Field>

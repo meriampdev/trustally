@@ -1,5 +1,6 @@
 node_modules/
 dist/
+backups/
 supabase/*
 !supabase/migrations/
 supabase/migrations/*
@@ -9,6 +10,8 @@ supabase/migrations/*
 !supabase/migrations/20260921150000_actual_set_aside_tracking.sql
 !supabase/migrations/20260924090000_include_recorded_online_in_box_check.sql
 !supabase/migrations/20260924130000_contingency_savings.sql
+!supabase/migrations/20260928120000_payment_reserve_workflow_v2.sql
+!supabase/migrations/20260928143000_fix_cycle_set_aside_case_type.sql
 !supabase/tests/
 supabase/tests/*
 !supabase/tests/business_accounting.sql

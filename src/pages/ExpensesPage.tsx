@@ -29,26 +29,40 @@ import { calculateBreakEven } from "../lib/breakEven";
 import { formatCurrency, parseNumberInput } from "../lib/format";
 import { getDefaultReportDateRange } from "../lib/reportRange";
 import { useCurrentLocation } from "../lib/location";
-import type { Expense, ExpenseCategory, ReportSetAside, ReportsSnapshot } from "../lib/types";
+import type { Expense, ExpenseCategory, ReportSetAside, ReportsSnapshot, ReserveKind } from "../lib/types";
 
 const categories: ExpenseCategory[] = ["Setup", "Equipment", "Repairs", "Supplies", "Transport", "Fees", "Other"];
 const allTimeStart = "2000-01-01";
 
+type ExpensePurpose = "PURESAFE_BOTTLES" | "WATER_REFILL" | "OTHER_PRODUCTS" | "ELECTRICITY" | "OTHER";
+
+const expensePurposes: Array<{ value: ExpensePurpose; label: string; description: string }> = [
+  { value: "PURESAFE_BOTTLES", label: "Puresafe bottles", description: "Deducts from the Puresafe reserve." },
+  { value: "WATER_REFILL", label: "Water container refill", description: "Deducts from the Puresafe reserve." },
+  { value: "OTHER_PRODUCTS", label: "Other products", description: "Deducts from the Other Products reserve." },
+  { value: "ELECTRICITY", label: "Electricity payment", description: "Deducts from the Electricity reserve." },
+  { value: "OTHER", label: "Other expense", description: "Choose its category and payment source." },
+];
+
 interface ExpenseDraft {
   id: string | null;
+  purpose: ExpensePurpose;
   incurredOn: string;
   category: ExpenseCategory;
   description: string;
   amount: string;
+  reservePaidFrom: ReserveKind | "";
 }
 
 function emptyDraft(): ExpenseDraft {
   return {
     id: null,
+    purpose: "OTHER",
     incurredOn: getDefaultReportDateRange().endDate,
     category: "Other",
     description: "",
     amount: "",
+    reservePaidFrom: "",
   };
 }
 
@@ -110,13 +124,15 @@ export default function ExpensesPage() {
     setIsSaving(true);
     setDraftError("");
     try {
+      const automatic = automaticExpenseDetails(draft.purpose);
       await saveExpense({
         id: draft.id,
         locationId: currentLocationId,
         incurredOn: draft.incurredOn,
-        category: draft.category,
-        description: draft.description,
+        category: automatic?.category ?? draft.category,
+        description: draft.description.trim() || automatic?.description || null,
         amount: draft.amount,
+        reservePaidFrom: (automatic?.reserve ?? draft.reservePaidFrom) || null,
       });
       setDraft(null);
       await load(currentLocationId);
@@ -175,8 +191,8 @@ export default function ExpensesPage() {
         ) : <Text color="canvas.700" mt={4}>Record startup, equipment, repair, supply, transport, fee, or other expenses to begin tracking break-even.</Text>}
       </SectionCard>
 
-      <SectionCard eyebrow="Expenses" title="Recorded costs">
-        <Button onClick={() => openExpenseDraft()}>Add expense</Button>
+      <SectionCard eyebrow="Expenses" title="Record expenses">
+        <Button onClick={() => openExpenseDraft()}>Record expense</Button>
         {expenses.length ? (
           <Stack spacing={3} mt={4}>
             {expenses.map((expense) => (
@@ -184,7 +200,7 @@ export default function ExpensesPage() {
                 <HStack justify="space-between" align="start" spacing={4}>
                   <Box minWidth={0}>
                     <Text fontWeight="900">{expense.description || expense.category}</Text>
-                    <Text color="canvas.700" mt={1}>{expense.category} · {formatDate(expense.incurredOn)}{expense.affectsInventoryCost ? " · Automatic restock purchase" : ""}</Text>
+                    <Text color="canvas.700" mt={1}>{expense.category} · {formatDate(expense.incurredOn)}{expense.affectsInventoryCost ? " · Automatic restock purchase" : ""}{expense.reservePaidFrom ? ` · Paid from ${reserveLabel(expense.reservePaidFrom)}` : ""}</Text>
                   </Box>
                   <Text fontWeight="900" flexShrink={0}>{formatCurrency(expense.amount)}</Text>
                 </HStack>
@@ -201,13 +217,21 @@ export default function ExpensesPage() {
       <Modal isOpen={draft !== null} onClose={() => !isSaving && setDraft(null)} isCentered size="lg">
         <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
         <ModalContent bg="canvas.100" border="1px solid" borderColor="whiteAlpha.200" borderRadius="28px" mx={4}>
-          <ModalHeader>{draft?.id ? "Edit expense" : "Add expense"}</ModalHeader><ModalCloseButton />
+          <ModalHeader>{draft?.id ? "Edit expense" : "Record expense"}</ModalHeader><ModalCloseButton />
           <ModalBody><Stack spacing={4}>
             <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4}>
               <FormControl isRequired><FormLabel>Date</FormLabel><Input type="date" value={draft?.incurredOn ?? ""} max={today} onChange={(event) => setDraft((value) => value ? { ...value, incurredOn: event.target.value } : value)} /></FormControl>
-              <FormControl isRequired><FormLabel>Category</FormLabel><Select value={draft?.category ?? "Other"} onChange={(event) => setDraft((value) => value ? { ...value, category: event.target.value as ExpenseCategory } : value)}>{categories.map((category) => <option key={category}>{category}</option>)}</Select></FormControl>
+              <FormControl isRequired><FormLabel>Expense for</FormLabel><Select value={draft?.purpose ?? "OTHER"} onChange={(event) => setDraft((value) => value ? applyExpensePurpose(value, event.target.value as ExpensePurpose) : value)}>{expensePurposes.map((purpose) => <option key={purpose.value} value={purpose.value}>{purpose.label}</option>)}</Select></FormControl>
             </SimpleGrid>
             <FormControl isRequired><FormLabel>Amount</FormLabel><Input value={draft?.amount ?? ""} inputMode="decimal" placeholder="0.00" onChange={(event) => setDraft((value) => value ? { ...value, amount: event.target.value } : value)} /></FormControl>
+            {draft?.purpose !== "OTHER" ? (
+              <ReserveDeductionNotice purpose={draft?.purpose ?? "OTHER"} setAside={setAside} />
+            ) : (
+              <>
+                <FormControl isRequired><FormLabel>Category</FormLabel><Select value={draft?.category ?? "Other"} onChange={(event) => setDraft((value) => value ? { ...value, category: event.target.value as ExpenseCategory } : value)}>{categories.map((category) => <option key={category}>{category}</option>)}</Select></FormControl>
+                <FormControl><FormLabel>Paid from</FormLabel><Select value={draft?.reservePaidFrom ?? ""} onChange={(event) => setDraft((value) => value ? { ...value, reservePaidFrom: event.target.value as ReserveKind | "" } : value)}><option value="">Regular expense</option><option value="PURESAFE">Puresafe reserve</option><option value="OTHER_PRODUCTS">Other Products reserve</option><option value="ELECTRICITY">Electricity reserve</option><option value="CONTINGENCY">Savings</option></Select></FormControl>
+              </>
+            )}
             <FormControl><FormLabel>Description</FormLabel><Textarea value={draft?.description ?? ""} placeholder="What was this expense for?" onChange={(event) => setDraft((value) => value ? { ...value, description: event.target.value } : value)} /></FormControl>
             {draftError ? <Text color="caution.600">{draftError}</Text> : null}
           </Stack></ModalBody>
@@ -247,7 +271,64 @@ function detailTitle(view: string | null) {
 }
 
 function toDraft(expense: Expense): ExpenseDraft {
-  return { id: expense.id, incurredOn: expense.incurredOn, category: expense.category, description: expense.description ?? "", amount: expense.amount.toFixed(2) };
+  return { id: expense.id, purpose: expensePurposeFor(expense), incurredOn: expense.incurredOn, category: expense.category, description: expense.description ?? "", amount: expense.amount.toFixed(2), reservePaidFrom: expense.reservePaidFrom ?? "" };
+}
+
+function automaticExpenseDetails(purpose: ExpensePurpose): { category: ExpenseCategory; reserve: ReserveKind; description: string } | null {
+  if (purpose === "PURESAFE_BOTTLES") return { category: "Supplies", reserve: "PURESAFE", description: "Puresafe bottles" };
+  if (purpose === "WATER_REFILL") return { category: "Supplies", reserve: "PURESAFE", description: "Water container refill" };
+  if (purpose === "OTHER_PRODUCTS") return { category: "Supplies", reserve: "OTHER_PRODUCTS", description: "Other products" };
+  if (purpose === "ELECTRICITY") return { category: "Fees", reserve: "ELECTRICITY", description: "Electricity payment" };
+  return null;
+}
+
+function applyExpensePurpose(draft: ExpenseDraft, purpose: ExpensePurpose): ExpenseDraft {
+  const previousDefault = automaticExpenseDetails(draft.purpose)?.description;
+  const next = automaticExpenseDetails(purpose);
+  return {
+    ...draft,
+    purpose,
+    category: next?.category ?? draft.category,
+    reservePaidFrom: next?.reserve ?? (purpose === "OTHER" ? "" : draft.reservePaidFrom),
+    description: !draft.description.trim() || draft.description === previousDefault
+      ? next?.description ?? ""
+      : draft.description,
+  };
+}
+
+function expensePurposeFor(expense: Expense): ExpensePurpose {
+  const description = (expense.description ?? "").toLowerCase();
+  if (expense.reservePaidFrom === "PURESAFE" && description.includes("water") && description.includes("refill")) return "WATER_REFILL";
+  if (expense.reservePaidFrom === "PURESAFE") return "PURESAFE_BOTTLES";
+  if (expense.reservePaidFrom === "OTHER_PRODUCTS") return "OTHER_PRODUCTS";
+  if (expense.reservePaidFrom === "ELECTRICITY") return "ELECTRICITY";
+  return "OTHER";
+}
+
+function ReserveDeductionNotice({ purpose, setAside }: { purpose: ExpensePurpose; setAside: ReportSetAside | null }) {
+  const details = automaticExpenseDetails(purpose);
+  if (!details) return null;
+  const funds = setAside?.summary.closingFundBalances ?? setAside?.summary.fundBalances;
+  const cashOnHand = details.reserve === "PURESAFE"
+    ? funds?.puresafe.physicalBalance
+    : details.reserve === "OTHER_PRODUCTS"
+      ? funds?.otherProducts.physicalBalance
+      : funds?.electricity.physicalBalance;
+  return (
+    <Box bg="canvas.50" borderRadius="20px" p={4}>
+      <Text fontWeight="900">Paid from {reserveLabel(details.reserve)}</Text>
+      <Text color="canvas.700" mt={1}>{expensePurposes.find((item) => item.value === purpose)?.description}</Text>
+      <Text mt={2}>Current cash on hand: <strong>{cashOnHand == null ? "Not available" : formatCurrency(cashOnHand)}</strong></Text>
+      {purpose === "PURESAFE_BOTTLES" || purpose === "OTHER_PRODUCTS" ? <Text color="canvas.700" fontSize="sm" mt={2}>If the same purchase is entered through Add Stock, do not record it here again.</Text> : null}
+    </Box>
+  );
+}
+
+function reserveLabel(value: ReserveKind) {
+  if (value === "PURESAFE") return "Puresafe reserve";
+  if (value === "OTHER_PRODUCTS") return "Other Products reserve";
+  if (value === "ELECTRICITY") return "Electricity reserve";
+  return "Contingency";
 }
 
 function formatDate(value: string) {

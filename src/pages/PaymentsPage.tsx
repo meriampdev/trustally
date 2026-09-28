@@ -14,15 +14,19 @@ import {
 } from "@chakra-ui/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SectionCard } from "../components/SectionCard";
-import { fetchHomeDashboard, fetchOutstandingBalances, recordPaymentReceipt } from "../lib/api";
+import { assignPaymentReceipt, fetchHomeDashboard, fetchOutstandingBalances, fetchPaymentAssignmentCycles, fetchUnassignedPaymentReceipts, recordPaymentReceipt } from "../lib/api";
 import { formatCurrency, formatDateTimeLabel, parseNumberInput } from "../lib/format";
-import { PayLaterBalance } from "../lib/types";
+import { PayLaterBalance, PaymentAssignmentCycle, PaymentReceipt } from "../lib/types";
 
 type PaymentFor = "CURRENT" | "PREVIOUS" | "MULTIPLE" | "NOT_SURE";
 
 export default function PaymentsPage() {
   const toast = useToast();
   const [balances, setBalances] = useState<PayLaterBalance[]>([]);
+  const [unassignedPayments, setUnassignedPayments] = useState<PaymentReceipt[]>([]);
+  const [assignmentCycles, setAssignmentCycles] = useState<PaymentAssignmentCycle[]>([]);
+  const [assignmentTargets, setAssignmentTargets] = useState<Record<string, string>>({});
+  const [assigningReceiptId, setAssigningReceiptId] = useState<string | null>(null);
   const [currentCycleId, setCurrentCycleId] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("GCASH");
@@ -48,14 +52,33 @@ export default function PaymentsPage() {
   async function load() {
     setIsLoading(true);
     try {
-      const [nextBalances, dashboard] = await Promise.all([
+      const [nextBalances, dashboard, nextUnassigned, nextCycles] = await Promise.all([
         fetchOutstandingBalances(),
         fetchHomeDashboard(),
+        fetchUnassignedPaymentReceipts(),
+        fetchPaymentAssignmentCycles(),
       ]);
       setBalances(nextBalances);
       setCurrentCycleId(dashboard.currentCycle?.id ?? null);
+      setUnassignedPayments(nextUnassigned);
+      setAssignmentCycles(nextCycles);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function assignReceipt(receipt: PaymentReceipt) {
+    const cycleId = assignmentTargets[receipt.id];
+    if (!cycleId) return;
+    setAssigningReceiptId(receipt.id);
+    try {
+      await assignPaymentReceipt({ receiptId: receipt.id, cycleId });
+      await load();
+      toast({ title: "Payment assigned", description: "The selected cycle was updated without creating another sale or payment.", status: "success", duration: 2800, position: "top" });
+    } catch (error) {
+      toast({ title: "Could not assign payment", description: error instanceof Error ? error.message : "Please try again.", status: "error", duration: 4200, position: "top" });
+    } finally {
+      setAssigningReceiptId(null);
     }
   }
 
@@ -156,7 +179,7 @@ export default function PaymentsPage() {
       <SectionCard eyebrow="Record payment" title="Add a delayed, bulk, or unassigned payment">
         <Box ref={formRef} />
         <Text color="canvas.700">
-          Use this for late GCash, Maya, or cash payments that arrive after the bottles were taken.
+          Use this for late cash, GCash, Maya, UnionBank, or BPI payments. “Not sure” reduces the overall unpaid gap immediately while leaving every cycle unchanged until assignment.
         </Text>
         {selectedBalanceId ? (
           <Box mt={4} borderRadius="24px" bg="canvas.50" p={4}>
@@ -175,6 +198,8 @@ export default function PaymentsPage() {
               <option value="CASH">Cash</option>
               <option value="GCASH">GCash</option>
               <option value="MAYA">Maya</option>
+              <option value="UNIONBANK">UnionBank</option>
+              <option value="BPI">BPI</option>
               <option value="BANK">Bank</option>
               <option value="OTHER">Other</option>
             </Select>
@@ -268,6 +293,13 @@ export default function PaymentsPage() {
         <Button mt={5} onClick={() => void handleSubmit()} isLoading={isSaving}>
           Record payment
         </Button>
+      </SectionCard>
+
+      <SectionCard eyebrow="Unassigned payments" title="Received, but not tied to a cycle yet">
+        {unassignedPayments.length ? <Stack spacing={3}>{unassignedPayments.map((receipt) => <Box key={receipt.id} borderRadius="24px" bg="canvas.50" p={4}>
+          <HStack justify="space-between" align="start"><Box><Text fontWeight="900">{receipt.method} · {formatCurrency(receipt.unallocatedAmount)}</Text><Text color="canvas.700" mt={1}>{formatDateTimeLabel(receipt.receivedAt)}{receipt.note ? ` · ${receipt.note}` : ""}</Text></Box></HStack>
+          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mt={3}><Select value={assignmentTargets[receipt.id] ?? ""} onChange={(event) => setAssignmentTargets((current) => ({ ...current, [receipt.id]: event.target.value }))}><option value="">Choose completed cycle</option>{assignmentCycles.map((cycle) => <option key={cycle.cycleId} value={cycle.cycleId}>Cycle #{cycle.cycleNumber} · gap {formatCurrency(cycle.gap)}</option>)}</Select><Button onClick={() => void assignReceipt(receipt)} isDisabled={!assignmentTargets[receipt.id]} isLoading={assigningReceiptId === receipt.id}>Assign without duplicating</Button></SimpleGrid>
+        </Box>)}</Stack> : <Text color="canvas.700">No unassigned payments.</Text>}
       </SectionCard>
 
       <SectionCard eyebrow="Outstanding" title="Current open balances">

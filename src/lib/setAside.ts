@@ -3,6 +3,7 @@ import type { CyclePaymentRecord, CycleSetAside, ReportSetAside } from "./types"
 interface SetAsideFunds {
   cashAvailableAfterChangeFloat: number;
   availableOnlinePayments: number;
+  eligibleOnlineReservePayments?: number;
   totalSetAside: number | null;
 }
 
@@ -19,11 +20,14 @@ export function summarizeOnlinePayments(records: CyclePaymentRecord[]) {
       if (record.channel !== "online") return summary;
       if (record.method === "GCASH") summary.gcashPayments += record.amount;
       else if (record.method === "MAYA") summary.mayaPayments += record.amount;
+      else if (record.method === "UNIONBANK") summary.unionbankPayments += record.amount;
+      else if (record.method === "BPI") summary.bpiPayments += record.amount;
+      else if (record.method === "BANK") summary.legacyBankPayments += record.amount;
       else summary.otherOnlinePayments += record.amount;
       summary.onlinePayments += record.amount;
       return summary;
     },
-    { gcashPayments: 0, mayaPayments: 0, otherOnlinePayments: 0, onlinePayments: 0 },
+    { gcashPayments: 0, mayaPayments: 0, unionbankPayments: 0, bpiPayments: 0, legacyBankPayments: 0, otherOnlinePayments: 0, onlinePayments: 0 },
   );
 }
 
@@ -43,60 +47,58 @@ export interface SetAsideShareComparison {
 export function calculateCashOnlySetAside({
   cashAvailableAfterChangeFloat,
   availableOnlinePayments,
+  eligibleOnlineReservePayments = 0,
   totalSetAside,
 }: SetAsideFunds) {
   if (totalSetAside == null) {
     return {
       cashAfterSetAside: null,
+      eligibleOnlineUsed: null,
       remainingEarnings: null,
       shortfall: null,
     };
   }
 
+  const eligibleOnlineUsed = Math.min(eligibleOnlineReservePayments, Math.max(totalSetAside - cashAvailableAfterChangeFloat, 0));
   const cashAfterSetAside = Math.max(cashAvailableAfterChangeFloat - totalSetAside, 0);
   return {
     cashAfterSetAside,
-    remainingEarnings: availableOnlinePayments + cashAfterSetAside,
-    shortfall: Math.max(totalSetAside - cashAvailableAfterChangeFloat, 0),
+    eligibleOnlineUsed,
+    remainingEarnings: Math.max(availableOnlinePayments - eligibleOnlineUsed, 0) + cashAfterSetAside,
+    shortfall: Math.max(totalSetAside - cashAvailableAfterChangeFloat - eligibleOnlineReservePayments, 0),
   };
 }
 
 export function calculateSetAsideShareComparison(value: SetAsideShareSource): SetAsideShareComparison {
-  let remainingCash = Math.max(value.cashAvailableAfterChangeFloat, 0);
+  let remainingFunding = Math.max(value.cashAvailableAfterChangeFloat, 0) + Math.max(value.eligibleOnlineReservePayments ?? 0, 0);
 
   const puresafeCanSetAside = value.puresafeCapital == null
     ? null
-    : Math.min(remainingCash, value.puresafeCapital);
-  if (puresafeCanSetAside != null) remainingCash -= puresafeCanSetAside;
+    : Math.min(remainingFunding, value.puresafeCapital);
+  if (puresafeCanSetAside != null) remainingFunding -= puresafeCanSetAside;
 
   const otherProductsCanSetAside = puresafeCanSetAside == null || value.miscCapital == null
     ? null
-    : Math.min(remainingCash, value.miscCapital);
-  if (otherProductsCanSetAside != null) remainingCash -= otherProductsCanSetAside;
+    : Math.min(remainingFunding, value.miscCapital);
+  if (otherProductsCanSetAside != null) remainingFunding -= otherProductsCanSetAside;
 
   const electricityCanSetAside = otherProductsCanSetAside == null
     ? null
-    : Math.min(remainingCash, value.electricityShare);
-  if (electricityCanSetAside != null) remainingCash -= electricityCanSetAside;
+    : Math.min(remainingFunding, value.electricityShare);
+  if (electricityCanSetAside != null) remainingFunding -= electricityCanSetAside;
 
   const contingencyTarget = value.contingencyCapital ?? 0;
   const contingencyCanSetAside = electricityCanSetAside == null
     ? null
-    : Math.min(remainingCash, contingencyTarget);
-  if (contingencyCanSetAside != null) remainingCash -= contingencyCanSetAside;
+    : Math.min(remainingFunding, contingencyTarget);
+  if (contingencyCanSetAside != null) remainingFunding -= contingencyCanSetAside;
 
   const totalReserveTarget = value.puresafeCapital == null || value.miscCapital == null
     ? null
     : value.puresafeCapital + value.electricityShare + value.miscCapital + contingencyTarget;
-  const targetToStash = totalReserveTarget != null
-    ? Math.max(
-        value.cashAvailableAfterChangeFloat
-          + value.availableOnlinePayments
-          - totalReserveTarget,
-        0,
-      )
-    : null;
-  const cashAfterReserves = contingencyCanSetAside == null ? null : remainingCash;
+  const result = calculateCashOnlySetAside({ ...value, totalSetAside: totalReserveTarget });
+  const targetToStash = result.remainingEarnings;
+  const cashAfterReserves = contingencyCanSetAside == null ? null : result.cashAfterSetAside;
 
   return {
     puresafe: { target: value.puresafeCapital, canSetAside: puresafeCanSetAside },
@@ -106,7 +108,7 @@ export function calculateSetAsideShareComparison(value: SetAsideShareSource): Se
     toStash: {
       target: targetToStash,
       canSetAside: cashAfterReserves == null ? null : value.availableOnlinePayments + cashAfterReserves,
-      onlinePayments: value.availableOnlinePayments,
+      onlinePayments: Math.max(value.availableOnlinePayments - (result.eligibleOnlineUsed ?? 0), 0),
       cashAfterReserves,
     },
   };

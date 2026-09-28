@@ -20,7 +20,6 @@ import { SectionCard } from "../components/SectionCard";
 import { PaymentDetailsModal } from "../components/PaymentDetailsModal";
 import { fetchCycleCashFloatDetail, fetchCycleDisclosureAndCollection, fetchCyclePaymentDetail, fetchHistoryFeed } from "../lib/api";
 import { formatCurrency, formatDateTimeLabel, formatPercent } from "../lib/format";
-import { exportCsv, printReport } from "../lib/exportData";
 import { CycleCashFloatDetail, CycleHonestyDetail, CyclePaymentDetail, HistoryFilter, HistoryItem } from "../lib/types";
 
 interface EnrichedHistoryItem extends HistoryItem {
@@ -37,7 +36,7 @@ const filters: Array<{ value: HistoryFilter; label: string }> = [
 ];
 
 export default function HistoryPage() {
-  const [filter, setFilter] = useState<HistoryFilter>("box_checks");
+  const [filter, setFilter] = useState<HistoryFilter>("all");
   const [items, setItems] = useState<EnrichedHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<EnrichedHistoryItem | null>(null);
@@ -81,30 +80,24 @@ export default function HistoryPage() {
     }
   }
 
-  const historyExportRows = items.map((item) => ({
-    Date: formatDateTimeLabel(item.happenedAt), Type: item.eventType, Title: item.title, Details: item.subtitle,
-    Quantity: item.quantity ?? "", "Bottles taken": item.bottlesTaken ?? "", "Expected revenue": item.expectedRevenue == null ? "" : formatCurrency(item.expectedRevenue),
-    "Total collected": item.totalCollected == null ? "" : formatCurrency(item.totalCollected), "Collection rate": item.collectionRate == null ? "" : formatPercent(item.collectionRate),
-  }));
-  const historyColumns = Object.keys(historyExportRows[0] ?? {}).map((key) => ({ label: key, value: (row: typeof historyExportRows[number]) => row[key as keyof typeof row] }));
-
   return (
     <Stack spacing={5}>
       <SectionCard eyebrow="Filters" title="Browse box activity">
-        <HStack spacing={3} flexWrap="wrap">
-          {filters.map((item) => (
-            <Button
-              key={item.value}
-              variant={filter === item.value ? "solid" : "subtle"}
-              borderColor={'canvas.900'}
-              onClick={() => setFilter(item.value)}
-            >
-              {item.label}
-            </Button>
-          ))}
-          <Button variant="outline" onClick={() => exportCsv("Trustally history", `trustally-history-${filter}.csv`, historyExportRows, historyColumns)}>Export CSV</Button>
-          <Button variant="outline" onClick={() => printReport("Trustally history", historyExportRows, historyColumns)}>Print / PDF</Button>
-        </HStack>
+        <Box overflowX="auto" maxW="100%" pb={1}>
+          <HStack spacing={2} width="max-content">
+            {filters.map((item) => (
+              <Button
+                key={item.value}
+                size="sm"
+                flexShrink={0}
+                variant={filter === item.value ? "solid" : "outline"}
+                onClick={() => setFilter(item.value)}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </HStack>
+        </Box>
       </SectionCard>
 
       {isLoading ? (
@@ -112,29 +105,26 @@ export default function HistoryPage() {
       ) : items.length ? (
         <Stack spacing={4}>
           {items.map((item) => (
-            <SectionCard key={item.id} title={item.title} eyebrow={formatDateTimeLabel(item.happenedAt)}>
-              <Text color="canvas.700">{item.subtitle}</Text>
-              <HStack mt={4} spacing={4} flexWrap="wrap">
-                {item.bottlesTaken != null ? <Text>{item.bottlesTaken} bottles taken</Text> : null}
-                {item.expectedRevenue != null ? <Text>Expected {formatCurrency(item.expectedRevenue)}</Text> : null}
-                {item.totalCollected != null ? <Text>Collected {formatCurrency(item.totalCollected)}</Text> : null}
-                {item.collectionRate != null || item.honestyRate != null ? <Text>Collection match {formatPercent(item.collectionRate ?? item.honestyRate)}</Text> : null}
+            <Box
+              as="button"
+              type="button"
+              key={item.id}
+              width="100%"
+              textAlign="left"
+              bg="canvas.50"
+              borderRadius="22px"
+              p={4}
+              onClick={() => setSelectedItem(item)}
+            >
+              <HStack justify="space-between" align="start" spacing={4}>
+                <Box minW={0}>
+                  <Text fontWeight="900">{item.title}</Text>
+                  <Text color="canvas.700" fontSize="sm" mt={1}>{formatDateTimeLabel(item.happenedAt)}</Text>
+                </Box>
+                <Text color="canvas.700" fontSize="sm" textAlign="right">View</Text>
               </HStack>
-              {item.cashFloat ? (
-                <Text color="canvas.700" mt={3}>
-                  Opening float {item.cashFloat.openingChangeFloat == null ? "Unknown" : formatCurrency(item.cashFloat.openingChangeFloat)} · Counted {formatCurrency(item.cashFloat.cashCountedBeforeWithdrawal)} · Cash generated {item.cashFloat.cashGenerated == null ? "Cannot be determined" : formatCurrency(item.cashFloat.cashGenerated)} · Left for Change {formatCurrency(item.cashFloat.closingChangeFloat)} · Withdrawn {formatCurrency(item.cashFloat.cashWithdrawn)}
-                </Text>
-              ) : null}
-              {item.cycleId ? (
-                <HStack mt={4} spacing={3} flexWrap="wrap">
-                  {item.cashPayments != null ? <Button onClick={() => setPaymentView({ item, channel: "cash" })} size="sm" variant="outline">Cash {formatCurrency(item.cashPayments)}</Button> : null}
-                  {item.onlinePayments != null ? <Button onClick={() => setPaymentView({ item, channel: "online" })} size="sm" variant="outline">Online {formatCurrency(item.onlinePayments)}</Button> : null}
-                  <Button onClick={() => setSelectedItem(item)} size="sm" variant="outline">View details</Button>
-                </HStack>
-              ) : (
-                <Button mt={4} size="sm" variant="outline" onClick={() => setSelectedItem(item)}>View details</Button>
-              )}
-            </SectionCard>
+              <Text color="canvas.700" fontSize="sm" mt={2} noOfLines={1}>{item.subtitle}</Text>
+            </Box>
           ))}
         </Stack>
       ) : (
@@ -161,6 +151,12 @@ export default function HistoryPage() {
                   {selectedItem.honestyDetail ? <HistoryValue label="Payment required" value={formatCurrency(selectedItem.honestyDetail.summary.currentlyDueAmount)} /> : null}
                   {selectedItem.quantity != null ? <HistoryValue label="Quantity" value={String(selectedItem.quantity)} /> : null}
                 </SimpleGrid>
+                {selectedItem.cycleId ? (
+                  <HStack spacing={2} overflowX="auto" pb={1}>
+                    {selectedItem.cashPayments != null ? <Button onClick={() => setPaymentView({ item: selectedItem, channel: "cash" })} size="sm" variant="outline" flexShrink={0}>Cash payments</Button> : null}
+                    {selectedItem.onlinePayments != null ? <Button onClick={() => setPaymentView({ item: selectedItem, channel: "online" })} size="sm" variant="outline" flexShrink={0}>Online payments</Button> : null}
+                  </HStack>
+                ) : null}
                 {selectedItem.cashFloat ? (
                   <Box bg="canvas.50" borderRadius="20px" p={4}>
                     <Text fontWeight="900">Cash box flow</Text>

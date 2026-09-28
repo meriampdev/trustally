@@ -57,6 +57,8 @@ export default function CycleDetailPage() {
     closingChangeFloat: "",
     gcashCollected: "",
     mayaCollected: "",
+    unionbankCollected: "",
+    bpiCollected: "",
     counts: {} as Record<string, string>,
     reason: "",
   });
@@ -140,6 +142,8 @@ export default function CycleDetailPage() {
       closingChangeFloat: String(cashFloat.closingChangeFloat),
       gcashCollected: String(detail.totals.gcashCollected),
       mayaCollected: String(detail.totals.mayaCollected),
+      unionbankCollected: String(detail.totals.unionbankCollected ?? 0),
+      bpiCollected: String(detail.totals.bpiCollected ?? 0),
       counts: Object.fromEntries(detail.productBreakdown.map((item) => [item.productId, String(item.endingQuantity)])),
       reason: "",
     });
@@ -162,6 +166,8 @@ export default function CycleDetailPage() {
         closingChangeFloat: correction.closingChangeFloat,
         gcashCollected: correction.gcashCollected,
         mayaCollected: correction.mayaCollected,
+        unionbankCollected: correction.unionbankCollected,
+        bpiCollected: correction.bpiCollected,
         counts: detail.productBreakdown.map((item) => ({
           productId: item.productId,
           endingQuantity: correction.counts[item.productId] ?? String(item.endingQuantity),
@@ -344,6 +350,12 @@ export default function CycleDetailPage() {
               </CorrectionField>
               <CorrectionField label="Maya collected">
                 <Input inputMode="decimal" value={correction.mayaCollected} onChange={(event) => setCorrection((current) => ({ ...current, mayaCollected: event.target.value }))} />
+              </CorrectionField>
+              <CorrectionField label="UnionBank collected">
+                <Input inputMode="decimal" value={correction.unionbankCollected} onChange={(event) => setCorrection((current) => ({ ...current, unionbankCollected: event.target.value }))} />
+              </CorrectionField>
+              <CorrectionField label="BPI collected">
+                <Input inputMode="decimal" value={correction.bpiCollected} onChange={(event) => setCorrection((current) => ({ ...current, bpiCollected: event.target.value }))} />
               </CorrectionField>
             </SimpleGrid>
             <Divider my={5} borderColor="whiteAlpha.300" />

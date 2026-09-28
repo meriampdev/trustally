@@ -26,16 +26,16 @@ import { BrandMark } from "./BrandMark";
 
 const navItems = [
   { label: "Home", to: "/", icon: House },
-  { label: "History", to: "/history", icon: History },
   { label: "Check Box", to: "/check-box", icon: ClipboardCheck, prominent: true },
+  { label: "History", to: "/history", icon: History },
   { label: "Reports", to: "/reports", icon: ChartColumn },
   { label: "More", to: "/more", icon: MoreHorizontal },
 ];
 
 const titles: Record<string, string> = {
-  "/": "Current cycle",
+  "/": "Home",
   "/setup": "Set up your box",
-  "/history": "Box history",
+  "/history": "History",
   "/check-box": "Check box",
   "/reports": "Reports",
   "/reports/business": "Business reports",

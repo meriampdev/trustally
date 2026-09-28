@@ -1,4 +1,4 @@
-import { Box, Button, SimpleGrid, Stack, Text } from "@chakra-ui/react";
+import { Box, Button, Progress, SimpleGrid, Stack, Text } from "@chakra-ui/react";
 import { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { formatCurrency } from "../lib/format";
@@ -22,25 +22,29 @@ export function SetAsideSummary({ value, onMetricClick, onRecordActual }: { valu
       {onRecordActual && showActual ? <Button variant="outline" alignSelf="start" onClick={onRecordActual}>{actual ? "Correct actual set aside" : "Record actual set aside"}</Button> : null}
       {showActual ? <SimpleGrid columns={{ base: 1, sm: 2, md: 5 }} spacing={3}>
         <MetricCard label="Total targets" value={totalTargets == null ? "Unable to calculate" : formatCurrency(totalTargets)} />
-        <MetricCard label="Actual Set Aside" value={actual ? formatCurrency(actual.physicalCashTotal) : "Not recorded"} hint="Physical cash only" />
+        <MetricCard label="Actual reserve funding" value={actual ? formatCurrency(actual.fundedReserveTotal ?? actual.physicalCashTotal) : "Not recorded"} hint={actual ? `${formatCurrency(actual.creditTotal ?? 0)} awaiting cash credit` : undefined} />
         <MetricCard label="Used for restocks" value={reserve?.usedForRestocks == null ? "Not tracked yet" : formatCurrency(reserve.usedForRestocks)} hint="Other Products purchases" />
         <MetricCard label="Net Set Aside" value={reserve?.netSetAside == null ? "Not recorded" : formatCurrency(reserve.netSetAside)} hint="Other Products actual less restocks" />
         <MetricCard label="Closing reserve" value={reserve?.closingBalance == null ? "Not tracked yet" : formatCurrency(reserve.closingBalance)} hint={reserve?.openingBalance == null ? undefined : `${formatCurrency(reserve.openingBalance)} opening`} />
       </SimpleGrid> : null}
       <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={4}>
         <MetricCard label="Cash available for reserves" value={formatCurrency(value.cashAvailableAfterChangeFloat)} hint="After preserving the change float" onClick={onMetricClick ? () => onMetricClick("cashAvailableAfterChangeFloat") : undefined} />
-        <SetAsideShareCard label="Puresafe Capital" target={shares.puresafe.target} canSetAside={shares.puresafe.canSetAside} showActual={showActual} actual={actual?.puresafeCapital ?? null} onClick={onMetricClick ? () => onMetricClick("puresafeCapital") : undefined}>
-          {value.fundBalances ? <Text>Fund: {formatCurrency(value.fundBalances.puresafe.balance)} / {formatCurrency(value.fundBalances.puresafe.goal)}{value.fundBalances.puresafe.goalMet ? " · Goal met" : ""}</Text> : null}
+        <SetAsideShareCard label="Puresafe Capital" target={shares.puresafe.target} canSetAside={shares.puresafe.canSetAside} showActual={showActual} actual={actual ? actual.puresafeCapital + (actual.creditPuresafeCapital ?? 0) : null} actualLabel="Actual funded" onClick={onMetricClick ? () => onMetricClick("puresafeCapital") : undefined}>
+          {actual ? <Text>{formatCurrency(actual.puresafeCapital)} physical · {formatCurrency(actual.creditPuresafeCapital ?? 0)} credit</Text> : null}
+          {value.fundBalances ? <ReserveBalanceLine value={value.fundBalances.puresafe} /> : null}
         </SetAsideShareCard>
-        <SetAsideShareCard label="Other Products Capital" target={shares.otherProducts.target} canSetAside={shares.otherProducts.canSetAside} showActual={showActual} actual={actual?.otherProductsCapital ?? null} onClick={onMetricClick ? () => onMetricClick("miscCapital") : undefined}>
-          {value.fundBalances ? <Text>Fund: {formatCurrency(value.fundBalances.otherProducts.balance)} / {formatCurrency(value.fundBalances.otherProducts.goal)}{value.fundBalances.otherProducts.goalMet ? " · Goal met" : ""}</Text> : null}
+        <SetAsideShareCard label="Other Products Capital" target={shares.otherProducts.target} canSetAside={shares.otherProducts.canSetAside} showActual={showActual} actual={actual ? actual.otherProductsCapital + (actual.creditOtherProductsCapital ?? 0) : null} actualLabel="Actual funded" onClick={onMetricClick ? () => onMetricClick("miscCapital") : undefined}>
+          {actual ? <Text>{formatCurrency(actual.otherProductsCapital)} physical · {formatCurrency(actual.creditOtherProductsCapital ?? 0)} credit</Text> : null}
+          {value.fundBalances ? <ReserveBalanceLine value={value.fundBalances.otherProducts} /> : null}
           {reserve ? <Stack spacing={0.5}><Text>Used for restocks: {reserve.usedForRestocks == null ? "Not tracked yet" : formatCurrency(reserve.usedForRestocks)}</Text><Text>Net set aside: {reserve.netSetAside == null ? "Not recorded" : formatCurrency(reserve.netSetAside)}</Text><Text>Reserve: {reserve.openingBalance == null ? "Not tracked" : formatCurrency(reserve.openingBalance)} opening · {reserve.closingBalance == null ? "Not tracked" : formatCurrency(reserve.closingBalance)} closing</Text></Stack> : null}
         </SetAsideShareCard>
-        <SetAsideShareCard label="Electricity Share" target={shares.electricity.target} canSetAside={shares.electricity.canSetAside} showActual={showActual} actual={actual?.electricityShare ?? null} hint={value.isEstimate ? "Estimated for the active cycle" : undefined} onClick={onMetricClick ? () => onMetricClick("electricityShare") : undefined}>
-          {value.fundBalances ? <Text>Fund: {formatCurrency(value.fundBalances.electricity.balance)} / {formatCurrency(value.fundBalances.electricity.goal)}{value.fundBalances.electricity.goalMet ? " · Goal met" : ""}</Text> : null}
+        <SetAsideShareCard label="Electricity Share" target={shares.electricity.target} canSetAside={shares.electricity.canSetAside} showActual={showActual} actual={actual ? actual.electricityShare + (actual.creditElectricityShare ?? 0) : null} actualLabel="Actual funded" hint={value.isEstimate ? "Estimated for the active cycle" : undefined} onClick={onMetricClick ? () => onMetricClick("electricityShare") : undefined}>
+          {actual ? <Text>{formatCurrency(actual.electricityShare)} physical · {formatCurrency(actual.creditElectricityShare ?? 0)} credit</Text> : null}
+          {value.fundBalances ? <ReserveBalanceLine value={value.fundBalances.electricity} /> : null}
         </SetAsideShareCard>
-        <SetAsideShareCard label="Contingency Savings" target={shares.contingency.target} canSetAside={shares.contingency.canSetAside} showActual={showActual} actual={actual?.contingency ?? null} hint="Receives contributions redirected from funds that reached their goals" onClick={onMetricClick ? () => onMetricClick("contingencyCapital") : undefined}>
-          {value.fundBalances ? <Text>Saved: {formatCurrency(value.fundBalances.contingency.balance)}</Text> : null}
+        <SetAsideShareCard label="Contingency Savings" target={shares.contingency.target} canSetAside={shares.contingency.canSetAside} showActual={showActual} actual={actual ? actual.contingency + (actual.creditContingency ?? 0) : null} actualLabel="Actual funded" hint="Receives contributions redirected from funds that reached their goals" onClick={onMetricClick ? () => onMetricClick("contingencyCapital") : undefined}>
+          {actual ? <Text>{formatCurrency(actual.contingency)} physical · {formatCurrency(actual.creditContingency ?? 0)} credit</Text> : null}
+          {value.fundBalances ? <Text>Physical: {formatCurrency(value.fundBalances.contingency.physicalBalance)} · Credit: {formatCurrency(value.fundBalances.contingency.creditAwaitingCash)} · Funded: {formatCurrency(value.fundBalances.contingency.fundedBalance)}</Text> : null}
         </SetAsideShareCard>
         <MetricCard label="Cash shortfall" value={shortfallValue} hint="Reserves not covered by available cash" onClick={onMetricClick ? () => onMetricClick("shortfall") : undefined} />
         <SetAsideShareCard
@@ -50,14 +54,18 @@ export function SetAsideSummary({ value, onMetricClick, onRecordActual }: { valu
           showActual={showActual}
           actual={actual?.toStashTotal ?? null}
           actualLabel="Actual total to Stash"
-          hint="Untouched online payments plus cash left after reserves"
+          hint="GCash and unearmarked online payments plus cash left after reserves"
           onClick={onMetricClick ? () => onMetricClick("remainingEarnings") : undefined}
         >
             <StashBreakdown
               availableOnlinePayments={shares.toStash.onlinePayments}
               gcashPayments={value.gcashPayments}
               mayaPayments={value.mayaPayments}
+              unionbankPayments={value.unionbankPayments}
+              bpiPayments={value.bpiPayments}
+              legacyBankPayments={value.legacyBankPayments}
               otherOnlinePayments={value.otherOnlinePayments}
+              reserveCredit={actual?.creditTotal ?? value.recommendedReserveCredit ?? 0}
               cashAfterSetAside={shares.toStash.cashAfterReserves}
             />
             {actual ? <Text>Total actually to Stash: {formatCurrency(actual.toStashTotal)}</Text> : null}
@@ -68,7 +76,7 @@ export function SetAsideSummary({ value, onMetricClick, onRecordActual }: { valu
       <Box bg="canvas.50" borderRadius="20px" p={4}>
         <Text fontWeight="900">Calculation</Text>
         <Text color="canvas.700" mt={1}>
-          Set aside is deducted from cash only in this priority: Puresafe, other products, electricity, then contingency. Once a fund reaches its goal, that fund's normal contribution is redirected to contingency. Online payments remain untouched.
+          Reserve funding follows this priority: Puresafe, other products, electricity, then contingency. GCash goes directly to Stash. Maya, UnionBank, and BPI can cover a reserve target as credit awaiting equal physical cash later.
         </Text>
         {value.missingPuresafeCost ? (
           <Stack mt={2} spacing={2}>
@@ -96,10 +104,11 @@ export function SetAsideSummary({ value, onMetricClick, onRecordActual }: { valu
         <Text color="canvas.700" mt={1}>
           Electricity need: {value.cycleHours.toFixed(2)} hours × {formatCurrency(value.electricityCostPerHour)} = {formatCurrency(value.originalElectricityShare ?? value.electricityShare)} · This cycle's target: {formatCurrency(value.electricityShare)}{value.isEstimate ? " (Estimated)" : ""}
         </Text>
+        {value.puresafeReserveGoalSnapshot != null || value.otherProductsReserveGoalSnapshot != null || value.electricityReserveGoalSnapshot != null ? <Text color="canvas.700" mt={1}>Goal settings saved with this cycle: Puresafe {value.puresafeReserveGoalSnapshot == null ? "Not available" : formatCurrency(value.puresafeReserveGoalSnapshot)} · Other Products {value.otherProductsReserveGoalSnapshot == null ? "Not available" : formatCurrency(value.otherProductsReserveGoalSnapshot)} · Electricity {value.electricityReserveGoalSnapshot == null ? "Not available" : formatCurrency(value.electricityReserveGoalSnapshot)}</Text> : null}
         {(value.contingencyCapital ?? 0) > 0 ? <Text color="canvas.700" mt={1}>Redirected to contingency: {formatCurrency(value.contingencyCapital)}</Text> : null}
         {cashAfterSetAside != null ? (
           <Stack spacing={1} mt={2} color="canvas.700">
-            <Text>Cash after set aside: {formatCurrency(cashAfterSetAside)} · GCash to Stash: {formatCurrency(value.gcashPayments ?? 0)} · Maya to Stash: {formatCurrency(value.mayaPayments ?? 0)}{(value.otherOnlinePayments ?? 0) > 0 ? ` · Other online: ${formatCurrency(value.otherOnlinePayments ?? 0)}` : ""}</Text>
+            <Text>Cash after set aside: {formatCurrency(cashAfterSetAside)} · GCash directly to Stash: {formatCurrency(value.gcashPayments ?? 0)} · Eligible online reserve funding: {formatCurrency(value.eligibleOnlineReservePayments ?? 0)}</Text>
           </Stack>
         ) : null}
       </Box>
@@ -130,6 +139,7 @@ export function SetAsideShareCard({
   actualLabel?: string;
   actualComparisonAvailable?: boolean;
 }) {
+  const progressAmount = showActual ? actual : canSetAside;
   return (
     <MetricCard
       label={label}
@@ -139,6 +149,15 @@ export function SetAsideShareCard({
       accent={(
         <Stack spacing={0.5} mt={2} color="canvas.700" fontSize="sm" lineHeight="short">
           {showActual ? <Text fontWeight="800">{actualLabel}: {actual == null ? "Not recorded" : formatCurrency(actual)}</Text> : null}
+          {target != null ? (
+            <Progress
+              value={setAsideProgress(progressAmount, target)}
+              size="sm"
+              borderRadius="full"
+              colorScheme={progressAmount != null && progressAmount >= target ? "green" : "cyan"}
+              aria-label={`${label} set-aside progress`}
+            />
+          ) : null}
           {showActual && actual != null && target != null ? <Text>{!actualComparisonAvailable ? "Shortage/excess unavailable until every included cycle is recorded" : actual < target ? `Shortage: ${formatCurrency(target - actual)}` : actual > target ? `Excess: ${formatCurrency(actual - target)}` : "Matches target"}</Text> : null}
           <Text fontWeight="700">Can set aside: {canSetAside == null ? "Unable to calculate" : formatCurrency(canSetAside)}</Text>
           {children}
@@ -148,28 +167,50 @@ export function SetAsideShareCard({
   );
 }
 
+function setAsideProgress(value: number | null | undefined, target: number) {
+  if (value == null || target <= 0) return 0;
+  return Math.min((value / target) * 100, 100);
+}
+
 export function StashBreakdown({
   availableOnlinePayments,
   gcashPayments,
   mayaPayments,
+  unionbankPayments,
+  bpiPayments,
+  legacyBankPayments,
   otherOnlinePayments,
+  reserveCredit,
   cashAfterSetAside,
 }: {
   availableOnlinePayments: number;
   gcashPayments?: number;
   mayaPayments?: number;
+  unionbankPayments?: number;
+  bpiPayments?: number;
+  legacyBankPayments?: number;
   otherOnlinePayments?: number;
+  reserveCredit?: number;
   cashAfterSetAside: number | null;
 }) {
-  const hasMethodBreakdown = gcashPayments != null || mayaPayments != null || otherOnlinePayments != null;
+  const hasMethodBreakdown = gcashPayments != null || mayaPayments != null || unionbankPayments != null || bpiPayments != null || legacyBankPayments != null || otherOnlinePayments != null;
   return (
     <Stack spacing={0.5}>
       {hasMethodBreakdown ? <>
-        <Text>GCash: {formatCurrency(gcashPayments ?? 0)}</Text>
-        <Text>Maya: {formatCurrency(mayaPayments ?? 0)}</Text>
+        <Text>GCash received → Stash: {formatCurrency(gcashPayments ?? 0)}</Text>
+        <Text>Maya received: {formatCurrency(mayaPayments ?? 0)}</Text>
+        <Text>UnionBank received: {formatCurrency(unionbankPayments ?? 0)}</Text>
+        <Text>BPI received: {formatCurrency(bpiPayments ?? 0)}</Text>
+        {(legacyBankPayments ?? 0) > 0 ? <Text>Legacy bank: {formatCurrency(legacyBankPayments ?? 0)}</Text> : null}
         {(otherOnlinePayments ?? 0) > 0 ? <Text>Other online: {formatCurrency(otherOnlinePayments ?? 0)}</Text> : null}
       </> : <Text>Online payments: {formatCurrency(availableOnlinePayments)}</Text>}
+      {hasMethodBreakdown ? <Text fontWeight="700">Online going to Stash: {formatCurrency(availableOnlinePayments)}</Text> : null}
+      {(reserveCredit ?? 0) > 0 ? <Text>Online earmarked for reserves: {formatCurrency(reserveCredit ?? 0)} credit awaiting cash</Text> : null}
       <Text>Cash after reserves: {cashAfterSetAside == null ? "Unable to calculate" : formatCurrency(cashAfterSetAside)}</Text>
     </Stack>
   );
+}
+
+function ReserveBalanceLine({ value }: { value: { goal: number; physicalBalance: number; creditAwaitingCash: number; fundedBalance: number; remaining: number; goalMet: boolean } }) {
+  return <Stack spacing={0.5}><Text>Physical: {formatCurrency(value.physicalBalance)}</Text><Text>Credit awaiting cash: {formatCurrency(value.creditAwaitingCash)}</Text><Text>Funded: {formatCurrency(value.fundedBalance)} / {formatCurrency(value.goal)}{value.goalMet ? " · Goal met" : ` · ${formatCurrency(value.remaining)} needed`}</Text></Stack>;
 }

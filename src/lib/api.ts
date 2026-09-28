@@ -28,6 +28,7 @@ import {
   NonSaleRemovalInput,
   PayLaterBalance,
   PersonHonestySummary,
+  PaymentAssignmentCycle,
   PaymentReceipt,
   Product,
   ProductUpsertInput,
@@ -76,6 +77,7 @@ export async function saveExpense(input: ExpenseInput) {
       p_category: input.category,
       p_description: input.description?.trim() || null,
       p_amount: input.amount,
+      p_reserve_paid_from: input.reservePaidFrom ?? null,
     });
   } catch (error) {
     if (isMissingRpcError(error, "save_expense")) {
@@ -255,6 +257,8 @@ export async function previewBoxCheck(input: {
   cashAddedForChangeNote?: string;
   gcashCollected: string;
   mayaCollected: string;
+  unionbankCollected: string;
+  bpiCollected: string;
   counts: CheckBoxCountInput[];
   nonSaleRemovals: NonSaleRemovalInput[];
 }) {
@@ -264,6 +268,8 @@ export async function previewBoxCheck(input: {
       p_closing_change_float: input.closingChangeFloat,
       p_gcash_collected: input.gcashCollected,
       p_maya_collected: input.mayaCollected,
+      p_unionbank_collected: input.unionbankCollected,
+      p_bpi_collected: input.bpiCollected,
       p_counts: input.counts,
       p_non_sale_removals: input.nonSaleRemovals,
       p_tracked_non_sales_cash_added: input.cashAddedForChange ?? "0",
@@ -287,6 +293,8 @@ export async function completeBoxCheck(input: {
   cashAddedForChangeNote?: string;
   gcashCollected: string;
   mayaCollected: string;
+  unionbankCollected: string;
+  bpiCollected: string;
   counts: CheckBoxCountInput[];
   nonSaleRemovals: NonSaleRemovalInput[];
   refillItems: CheckBoxRefillInput[];
@@ -299,6 +307,8 @@ export async function completeBoxCheck(input: {
       p_closing_change_float: input.closingChangeFloat,
       p_gcash_collected: input.gcashCollected,
       p_maya_collected: input.mayaCollected,
+      p_unionbank_collected: input.unionbankCollected,
+      p_bpi_collected: input.bpiCollected,
       p_counts: input.counts,
       p_non_sale_removals: input.nonSaleRemovals,
       p_refill_items: input.refillItems,
@@ -394,6 +404,26 @@ export async function recordPaymentReceipt(input: {
   });
 }
 
+export async function fetchUnassignedPaymentReceipts() {
+  return rpc<PaymentReceipt[]>("list_unassigned_payment_receipts");
+}
+
+export async function fetchPaymentAssignmentCycles() {
+  return rpc<PaymentAssignmentCycle[]>("list_payment_assignment_cycles");
+}
+
+export async function assignPaymentReceipt(input: {
+  receiptId: string;
+  cycleId?: string | null;
+  payLaterBalanceId?: string | null;
+}) {
+  return rpc<{ id: string; assigned: boolean }>("assign_payment_receipt", {
+    p_receipt_id: input.receiptId,
+    p_cycle_id: input.cycleId ?? null,
+    p_pay_later_balance_id: input.payLaterBalanceId ?? null,
+  });
+}
+
 export async function fetchCashMovements() {
   try {
     return await rpc<CashMovement[]>("list_cash_movements");
@@ -476,6 +506,14 @@ export async function saveCycleSetAsideActual(input: ActualSetAsideInput) {
       p_actual_other_products_capital: input.otherProductsCapital,
       p_actual_electricity_share: input.electricityShare,
       p_actual_contingency: input.contingency,
+      p_credit_puresafe_capital: input.creditPuresafeCapital,
+      p_credit_other_products_capital: input.creditOtherProductsCapital,
+      p_credit_electricity_share: input.creditElectricityShare,
+      p_credit_contingency: input.creditContingency,
+      p_cleared_puresafe_credit: input.clearedPuresafeCredit,
+      p_cleared_other_products_credit: input.clearedOtherProductsCredit,
+      p_cleared_electricity_credit: input.clearedElectricityCredit,
+      p_cleared_contingency_credit: input.clearedContingencyCredit,
       p_actual_to_stash_cash: input.toStashCash,
       p_note: input.note?.trim() || null,
     });
@@ -523,6 +561,8 @@ export async function correctCompletedBoxCycle(input: CompletedCycleCorrectionIn
       p_closing_change_float: input.closingChangeFloat,
       p_gcash_collected: input.gcashCollected,
       p_maya_collected: input.mayaCollected,
+      p_unionbank_collected: input.unionbankCollected,
+      p_bpi_collected: input.bpiCollected,
       p_counts: input.counts,
       p_reason: input.reason,
     });
@@ -713,6 +753,9 @@ export async function updateSetAsideSettings(input: Settings) {
     p_misc_capital_type: input.miscCapitalType,
     p_fixed_misc_capital: input.fixedMiscCapital,
     p_misc_capital_percentage: input.miscCapitalPercentage,
+    p_puresafe_reserve_goal: input.puresafeReserveGoal,
+    p_other_products_reserve_goal: input.otherProductsReserveGoal,
+    p_electricity_reserve_goal: input.electricityReserveGoal,
   });
 }
 
@@ -858,7 +901,7 @@ function normalizeReportsSnapshot(
         snapshot?.summary?.outstandingAmount ??
         (hasLegacyMetricsShape ? fallbackOutstandingAmount : 0),
       unaccountedAmount: paymentDetail
-        ? reportCycles.reduce((sum, cycle) => sum + cycle.unaccountedAmount, 0)
+        ? Math.max((snapshot?.summary?.expectedRevenue ?? legacyExpectedRevenue) - dynamicTotalPayments, 0)
         : snapshot?.summary?.unaccountedAmount ?? 0,
       totalShort: paymentDetail ? Math.max(-dynamicDifference, 0) : snapshot?.summary?.totalShort ?? 0,
       totalOver: paymentDetail ? Math.max(dynamicDifference, 0) : snapshot?.summary?.totalOver ?? 0,
@@ -890,6 +933,7 @@ function normalizeReportsSnapshot(
       totalPayments: dynamicTotalPayments,
       cashPayments: dynamicPayments?.cashPayments ?? 0,
       onlinePayments: dynamicPayments?.onlinePayments ?? 0,
+      unassignedPayments: dynamicPayments?.unassignedPayments ?? 0,
       outstandingRequiredAmount: disclosureSummary
         ? Math.max(disclosureSummary.paymentRequiredAmount - dynamicTotalPayments, 0)
         : 0,
@@ -968,11 +1012,17 @@ function reconcileReportCashPayments(
     const cashPayments = cycle.cashPayments - legacyCash + float.cashGenerated;
     return { ...cycle, cashPayments, totalPayments: cashPayments + cycle.onlinePayments };
   });
+  const originalCycleCash = payments.cycles.reduce((sum, cycle) => sum + cycle.cashPayments, 0);
+  const reconciledCycleCash = cycles.reduce((sum, cycle) => sum + cycle.cashPayments, 0);
+  const cashPayments = payments.summary.cashPayments - originalCycleCash + reconciledCycleCash;
+  const onlinePayments = payments.summary.onlinePayments;
   return {
     summary: {
-      cashPayments: cycles.reduce((sum, cycle) => sum + cycle.cashPayments, 0),
-      onlinePayments: cycles.reduce((sum, cycle) => sum + cycle.onlinePayments, 0),
-      totalPayments: cycles.reduce((sum, cycle) => sum + cycle.totalPayments, 0),
+      cashPayments,
+      onlinePayments,
+      totalPayments: cashPayments + onlinePayments,
+      assignedPayments: cycles.reduce((sum, cycle) => sum + cycle.totalPayments, 0),
+      unassignedPayments: payments.summary.unassignedPayments ?? 0,
     },
     cycles,
     records,

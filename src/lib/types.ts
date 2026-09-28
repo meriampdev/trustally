@@ -1,7 +1,7 @@
 export type CycleStatus = "ACTIVE" | "CHECKING" | "COMPLETED" | "VOIDED";
 export type HistoryFilter = "all" | "box_checks" | "stock_added" | "adjustments";
 export type LocationRole = "OWNER" | "STAFF";
-export type PaymentMethod = "CASH" | "GCASH" | "MAYA" | "BANK" | "OTHER";
+export type PaymentMethod = "CASH" | "GCASH" | "MAYA" | "UNIONBANK" | "BPI" | "BANK" | "OTHER";
 export type PaymentTiming = "CURRENT" | "DELAYED" | "ADVANCE" | "UNASSIGNED";
 export type DisclosureSource = "unknown" | "self_reported" | "owner_recorded" | "inventory_discrepancy";
 export type PaymentExpectation = "unknown" | "required" | "pay_later" | "complimentary";
@@ -174,6 +174,8 @@ export interface CheckBoxDraft {
   cashAddedForChangeNote: string;
   gcashCollected: string;
   mayaCollected: string;
+  unionbankCollected: string;
+  bpiCollected: string;
   counts: Record<string, string>;
   nonSaleRemovals: NonSaleRemovalInput[];
   refillItems: CheckBoxRefillInput[];
@@ -222,9 +224,14 @@ export interface CheckBoxPreview {
     cashAddedForChangeNote?: string | null;
     gcashCollected: number;
     mayaCollected: number;
+    unionbankCollected?: number;
+    bpiCollected?: number;
     recordedOnlinePayments?: number;
     recordedGcashPayments?: number;
     recordedMayaPayments?: number;
+    recordedUnionbankPayments?: number;
+    recordedBpiPayments?: number;
+    recordedLegacyBankPayments?: number;
     recordedOtherOnlinePayments?: number;
     cogs: number;
     grossProfit: number;
@@ -270,6 +277,8 @@ export interface CompletedCycleCorrectionInput {
   closingChangeFloat: string;
   gcashCollected: string;
   mayaCollected: string;
+  unionbankCollected: string;
+  bpiCollected: string;
   counts: CheckBoxCountInput[];
   reason: string;
 }
@@ -326,6 +335,8 @@ export interface CycleDetail {
     cashCollected: number;
     gcashCollected: number;
     mayaCollected: number;
+    unionbankCollected?: number;
+    bpiCollected?: number;
     cashRemoved: number;
     /** @deprecated Legacy alias for closingChangeFloat. */
     cashReturned: number;
@@ -487,14 +498,14 @@ export interface CycleHonestyDetail {
 
 export interface CyclePaymentRecord {
   id: string;
-  cycleId: string;
+  cycleId: string | null;
   cycleLabel: string;
   occurredAt: string;
   recordedAt: string;
   amount: number;
   method: PaymentMethod;
   channel: "cash" | "online";
-  source: "cycle_check_total" | "retroactive" | "allocated_receipt" | "direct_receipt";
+  source: "cycle_check_total" | "retroactive" | "allocated_receipt" | "direct_receipt" | "unassigned_receipt";
   personLabel?: string | null;
   referenceNumber?: string | null;
   note?: string | null;
@@ -508,6 +519,8 @@ export interface CyclePaymentDetail {
     cashPayments: number;
     onlinePayments: number;
     totalPayments: number;
+    assignedPayments?: number;
+    unassignedPayments?: number;
   };
   records: CyclePaymentRecord[];
 }
@@ -552,7 +565,14 @@ export interface CycleSetAside {
   availableOnlinePayments: number;
   gcashPayments?: number;
   mayaPayments?: number;
+  unionbankPayments?: number;
+  bpiPayments?: number;
+  legacyBankPayments?: number;
   otherOnlinePayments?: number;
+  eligibleOnlineReservePayments?: number;
+  recommendedReserveCredit?: number | null;
+  onlineToStash?: number | null;
+  cashToStashTarget?: number | null;
   totalAvailable: number;
   puresafeBottlesToReplace: number;
   puresafeCostPerUnit: number | null;
@@ -583,12 +603,26 @@ export interface CycleSetAside {
   remainingEarnings: number | null;
   shortfall: number | null;
   settingsSnapshottedAt: string | null;
+  puresafeReserveGoalSnapshot?: number | null;
+  otherProductsReserveGoalSnapshot?: number | null;
+  electricityReserveGoalSnapshot?: number | null;
   actualSetAside?: {
     id: string;
     puresafeCapital: number;
     otherProductsCapital: number;
     electricityShare: number;
     contingency: number;
+    creditPuresafeCapital?: number;
+    creditOtherProductsCapital?: number;
+    creditElectricityShare?: number;
+    creditContingency?: number;
+    clearedPuresafeCredit?: number;
+    clearedOtherProductsCredit?: number;
+    clearedElectricityCredit?: number;
+    clearedContingencyCredit?: number;
+    creditTotal?: number;
+    creditClearedTotal?: number;
+    fundedReserveTotal?: number;
     toStashCash: number;
     onlineToStash: number;
     toStashTotal: number;
@@ -607,10 +641,10 @@ export interface CycleSetAside {
   };
   fundBalances?: {
     trackingStartedAt: string | null;
-    puresafe: { goal: number; balance: number; remaining: number; goalMet: boolean; used?: number };
-    otherProducts: { goal: number; balance: number; remaining: number; goalMet: boolean; used?: number };
-    electricity: { goal: number; balance: number; remaining: number; goalMet: boolean };
-    contingency: { balance: number };
+    puresafe: ReserveFundBalance;
+    otherProducts: ReserveFundBalance;
+    electricity: ReserveFundBalance;
+    contingency: Omit<ReserveFundBalance, "goal" | "remaining" | "goalMet">;
   };
 }
 
@@ -634,9 +668,19 @@ export interface ReportSetAside {
     actualContingency?: number | null;
     actualToStashCash?: number | null;
     actualPhysicalTotal?: number | null;
+    actualCreditPuresafeCapital?: number | null;
+    actualCreditOtherProductsCapital?: number | null;
+    actualCreditElectricityShare?: number | null;
+    actualCreditContingency?: number | null;
+    actualCreditTotal?: number | null;
+    actualFundedReserveTotal?: number | null;
     onlineToStash?: number;
     gcashToStash?: number;
     mayaToStash?: number;
+    mayaPayments?: number;
+    unionbankPayments?: number;
+    bpiPayments?: number;
+    legacyBankPayments?: number;
     otherOnlineToStash?: number;
     usedForOtherProductRestocks?: number | null;
     netOtherProductsSetAside?: number | null;
@@ -646,6 +690,13 @@ export interface ReportSetAside {
     actualRecordedCycles?: number;
     actualUnrecordedCycles?: number;
     fundBalances?: CycleSetAside["fundBalances"];
+    openingFundBalances?: CycleSetAside["fundBalances"];
+    closingFundBalances?: CycleSetAside["fundBalances"];
+    goalHits?: {
+      puresafe: { count: number; dates: string[] };
+      otherProducts: { count: number; dates: string[] };
+      electricity: { count: number; dates: string[] };
+    };
   };
   cycles: CycleSetAside[];
 }
@@ -656,6 +707,14 @@ export interface ActualSetAsideInput {
   otherProductsCapital: string;
   electricityShare: string;
   contingency: string;
+  creditPuresafeCapital: string;
+  creditOtherProductsCapital: string;
+  creditElectricityShare: string;
+  creditContingency: string;
+  clearedPuresafeCredit: string;
+  clearedOtherProductsCredit: string;
+  clearedElectricityCredit: string;
+  clearedContingencyCredit: string;
   toStashCash: string;
   note?: string;
 }
@@ -681,6 +740,7 @@ export interface Expense {
   productId?: string | null;
   restockId?: string | null;
   affectsInventoryCost?: boolean;
+  reservePaidFrom?: ReserveKind | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -850,6 +910,7 @@ export interface ExpenseInput {
   category: ExpenseCategory;
   description?: string | null;
   amount: string;
+  reservePaidFrom?: ReserveKind | null;
 }
 
 export interface ReportCashFloatDetail {
@@ -922,6 +983,7 @@ export interface ReportsSnapshot {
     totalPayments: number;
     cashPayments: number;
     onlinePayments: number;
+    unassignedPayments?: number;
     outstandingRequiredAmount: number;
   };
   expectedVsCollected: Array<{
@@ -1054,6 +1116,9 @@ export interface Settings {
   honestyGoodMin: number;
   honestyAttentionMin: number;
   electricityCostPerHour: number;
+  puresafeReserveGoal: number;
+  otherProductsReserveGoal: number;
+  electricityReserveGoal: number;
   miscCapitalType: MiscCapitalType;
   fixedMiscCapital: number;
   miscCapitalPercentage: number;
@@ -1097,6 +1162,28 @@ export interface PaymentReceipt {
   note?: string | null;
   relatedCycleId?: string | null;
   unallocatedAmount: number;
+}
+
+export type ReserveKind = "PURESAFE" | "OTHER_PRODUCTS" | "ELECTRICITY" | "CONTINGENCY";
+
+export interface ReserveFundBalance {
+  goal: number;
+  physicalBalance: number;
+  creditAwaitingCash: number;
+  fundedBalance: number;
+  balance: number;
+  remaining: number;
+  goalMet: boolean;
+  used?: number;
+}
+
+export interface PaymentAssignmentCycle {
+  cycleId: string;
+  cycleNumber: number;
+  completedAt: string;
+  expectedRevenue: number;
+  payments: number;
+  gap: number;
 }
 
 export interface CashMovement {

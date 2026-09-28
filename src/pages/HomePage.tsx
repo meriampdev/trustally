@@ -9,167 +9,136 @@ import {
   ModalFooter,
   ModalHeader,
   ModalOverlay,
+  Progress,
   SimpleGrid,
   Spinner,
   Stack,
   Text,
-  useToast,
   VStack,
+  useToast,
 } from "@chakra-ui/react";
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { DateRangeModal } from "../components/DateRangeModal";
 import { ActualSetAsideModal } from "../components/ActualSetAsideModal";
-import { BusinessPerformance } from "../components/BusinessPerformance";
+import { DateRangeModal } from "../components/DateRangeModal";
 import { MetricCard } from "../components/MetricCard";
-import { PaymentDetailsModal } from "../components/PaymentDetailsModal";
 import { SectionCard } from "../components/SectionCard";
-import { SetAsideShareCard, SetAsideSummary, StashBreakdown } from "../components/SetAsideSummary";
 import { useCurrentLocation } from "../lib/location";
 import {
-  fetchCashMovements,
-  fetchCycleCashFloatDetail,
-  fetchCycleDisclosureAndCollection,
   fetchCyclePaymentDetail,
   fetchCycleSetAside,
   fetchHistoryFeed,
   fetchHomeDashboard,
-  fetchOutstandingBalances,
   fetchProducts,
-  fetchReportsSnapshot,
   fetchReportSetAside,
 } from "../lib/api";
-import {
-  formatCount,
-  formatCurrency,
-  formatDateTimeLabel,
-  formatDurationFromNow,
-  formatPercent,
-} from "../lib/format";
-import { formatReportDateRange, ReportRangeKey } from "../lib/reportRange";
-import { calculateReportSetAsideShareComparison, calculateSetAsideShareComparison, summarizeOnlinePayments } from "../lib/setAside";
-import { CashMovement, CycleCashFloatDetail, CycleHonestyDetail, CyclePaymentDetail, CyclePaymentRecord, CycleSetAside, HistoryItem, HomeDashboard, PayLaterBalance, Product, ReportSetAside, ReportsSnapshot } from "../lib/types";
+import { formatCurrency, formatDateTimeLabel, formatDurationFromNow } from "../lib/format";
+import { formatReportDateRange } from "../lib/reportRange";
+import { calculateSetAsideShareComparison, summarizeOnlinePayments } from "../lib/setAside";
+import type { ReportRangeKey } from "../lib/reportRange";
+import type { CyclePaymentDetail, CycleSetAside, HomeDashboard, Product, ReportSetAside } from "../lib/types";
 
-type MetricsRange = "latest" | ReportRangeKey;
-type DashboardDetail = { title: string; description: string; values: Array<[string, string]>; route?: string; routeLabel?: string };
+type StashRange = "latest" | Extract<ReportRangeKey, "7d" | "30d" | "custom">;
 
-const metricsRangeOptions: Array<{ value: MetricsRange; label: string }> = [
-  { value: "latest", label: "Current cycle" },
-  { value: "7d", label: "Last 7 days" },
-  { value: "30d", label: "Last 30 days" },
+const stashRangeOptions: Array<{ value: StashRange; label: string }> = [
+  { value: "latest", label: "Latest check" },
+  { value: "7d", label: "7 days" },
+  { value: "30d", label: "30 days" },
   { value: "custom", label: "Custom dates" },
 ];
+
+type DashboardDetail = {
+  title: string;
+  description?: string;
+  values: Array<[string, string]>;
+  route?: string;
+  routeLabel?: string;
+};
+
+type ReserveRow = {
+  key: string;
+  label: string;
+  goal: number | null;
+  actual: number | null;
+  remaining: number | null;
+  detail: DashboardDetail;
+};
 
 export default function HomePage() {
   const toast = useToast();
   const { currentLocationId } = useCurrentLocation();
   const [dashboard, setDashboard] = useState<HomeDashboard | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
-  const [latestStockEntry, setLatestStockEntry] = useState<HistoryItem | null>(null);
-  const [latestBoxCheckEntry, setLatestBoxCheckEntry] = useState<HistoryItem | null>(null);
-  const [outstandingBalances, setOutstandingBalances] = useState<PayLaterBalance[]>([]);
-  const [cashMovements, setCashMovements] = useState<CashMovement[]>([]);
-  const [recentHonesty, setRecentHonesty] = useState<CycleHonestyDetail | null>(null);
-  const [recentCyclePayments, setRecentCyclePayments] = useState<CyclePaymentDetail | null>(null);
-  const [recentCashFloat, setRecentCashFloat] = useState<CycleCashFloatDetail | null>(null);
-  const [recentSetAside, setRecentSetAside] = useState<CycleSetAside | null>(null);
-  const [currentCashFloat, setCurrentCashFloat] = useState<CycleCashFloatDetail | null>(null);
-  const [paymentDetailView, setPaymentDetailView] = useState<CyclePaymentRecord["channel"] | "all" | null>(null);
-  const [metricsRange, setMetricsRange] = useState<MetricsRange>("latest");
-  const [customStartDate, setCustomStartDate] = useState("");
-  const [customEndDate, setCustomEndDate] = useState("");
-  const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
-  const [rangeMetrics, setRangeMetrics] = useState<ReportsSnapshot | null>(null);
-  const [rangeSetAside, setRangeSetAside] = useState<ReportSetAside | null>(null);
-  const [isMetricsLoading, setIsMetricsLoading] = useState(false);
-  const [metricsError, setMetricsError] = useState("");
+  const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
+  const [payments, setPayments] = useState<CyclePaymentDetail | null>(null);
+  const [setAside, setSetAside] = useState<CycleSetAside | null>(null);
+  const [detail, setDetail] = useState<DashboardDetail | null>(null);
+  const [isContentsOpen, setIsContentsOpen] = useState(false);
+  const [isActualOpen, setIsActualOpen] = useState(false);
+  const [stashRange, setStashRange] = useState<StashRange>("latest");
+  const [stashStartDate, setStashStartDate] = useState("");
+  const [stashEndDate, setStashEndDate] = useState("");
+  const [stashReport, setStashReport] = useState<ReportSetAside | null>(null);
+  const [isStashLoading, setIsStashLoading] = useState(false);
+  const [stashError, setStashError] = useState("");
+  const [isStashDateOpen, setIsStashDateOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [dashboardDetail, setDashboardDetail] = useState<DashboardDetail | null>(null);
-  const [isActualSetAsideOpen, setIsActualSetAsideOpen] = useState(false);
 
   useEffect(() => {
-    void load(currentLocationId);
+    void load();
   }, [currentLocationId]);
 
   useEffect(() => {
-    let cancelled = false;
-    if (metricsRange === "latest") {
-      setRangeMetrics(null);
-      setRangeSetAside(null);
-      setMetricsError("");
-      setIsMetricsLoading(false);
+    if (stashRange === "latest") {
+      setStashReport(null);
+      setStashError("");
+      setIsStashLoading(false);
       return;
     }
-    if (metricsRange === "custom" && (!customStartDate || !customEndDate)) return;
-
-    setIsMetricsLoading(true);
-    setRangeMetrics(null);
-    setRangeSetAside(null);
-    setMetricsError("");
-    const startDate = metricsRange === "custom" ? customStartDate : null;
-    const endDate = metricsRange === "custom" ? customEndDate : null;
-    void Promise.all([
-      fetchReportsSnapshot(metricsRange, startDate, endDate),
-      fetchReportSetAside(metricsRange, startDate, endDate),
-    ])
-      .then(([result, setAsideResult]) => {
-        if (!cancelled) {
-          setRangeMetrics(result);
-          setRangeSetAside(setAsideResult);
-        }
+    if (stashRange === "custom" && (!stashStartDate || !stashEndDate)) return;
+    let cancelled = false;
+    setIsStashLoading(true);
+    setStashError("");
+    const startDate = stashRange === "custom" ? stashStartDate : null;
+    const endDate = stashRange === "custom" ? stashEndDate : null;
+    void fetchReportSetAside(stashRange, startDate, endDate)
+      .then((result) => {
+        if (!cancelled) setStashReport(result);
       })
       .catch((error) => {
-        if (!cancelled) setMetricsError(error instanceof Error ? error.message : "Could not load this period.");
+        if (!cancelled) setStashError(error instanceof Error ? error.message : "Could not load To Stash.");
       })
       .finally(() => {
-        if (!cancelled) setIsMetricsLoading(false);
+        if (!cancelled) setIsStashLoading(false);
       });
-
     return () => { cancelled = true; };
-  }, [metricsRange, customStartDate, customEndDate, currentLocationId]);
+  }, [stashRange, stashStartDate, stashEndDate, currentLocationId]);
 
-  async function load(selectedLocationId?: string | null) {
+  async function load() {
     setIsLoading(true);
     setErrorMessage("");
-
     try {
-      const [
-        nextDashboard,
-        nextProducts,
-        stockHistory,
-        boxCheckHistory,
-        nextOutstandingBalances,
-        nextCashMovements,
-      ] = await Promise.all([
-        fetchHomeDashboard(selectedLocationId),
+      const [nextDashboard, nextProducts, checks] = await Promise.all([
+        fetchHomeDashboard(currentLocationId),
         fetchProducts(),
-        fetchHistoryFeed("stock_added", 1, 0),
         fetchHistoryFeed("box_checks", 1, 0),
-        fetchOutstandingBalances(),
-        fetchCashMovements(),
       ]);
-
       setDashboard(nextDashboard);
       setProducts(nextProducts);
-      setLatestStockEntry(stockHistory[0] ?? null);
-      setLatestBoxCheckEntry(boxCheckHistory[0] ?? null);
-      setOutstandingBalances(nextOutstandingBalances);
-      setCashMovements(nextCashMovements);
-      const recentCycleId = nextDashboard.recentResult?.cycleId;
-      const [nextHonesty, nextCyclePayments, nextRecentCashFloat, nextSetAside] = recentCycleId
-        ? await Promise.all([
-            fetchCycleDisclosureAndCollection(recentCycleId),
-            fetchCyclePaymentDetail(recentCycleId),
-            fetchCycleCashFloatDetail(recentCycleId),
-            fetchCycleSetAside(recentCycleId),
-          ])
-        : [null, null, null, null];
-      setRecentHonesty(nextHonesty);
-      setRecentCyclePayments(nextCyclePayments);
-      setRecentCashFloat(nextRecentCashFloat);
-      setRecentSetAside(nextSetAside);
-      setCurrentCashFloat(nextDashboard.currentCycle?.id ? await fetchCycleCashFloatDetail(nextDashboard.currentCycle.id) : null);
+      setLastCheckedAt(nextDashboard.currentCycle?.lastCheckedAt ?? checks[0]?.happenedAt ?? null);
+
+      if (nextDashboard.recentResult?.cycleId) {
+        const [nextPayments, nextSetAside] = await Promise.all([
+          fetchCyclePaymentDetail(nextDashboard.recentResult.cycleId),
+          fetchCycleSetAside(nextDashboard.recentResult.cycleId),
+        ]);
+        setPayments(nextPayments);
+        setSetAside(nextSetAside);
+      } else {
+        setPayments(null);
+        setSetAside(null);
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Could not load your box.");
     } finally {
@@ -177,600 +146,364 @@ export default function HomePage() {
     }
   }
 
-  const outstandingAmount = useMemo(
-    () => outstandingBalances.reduce((sum, balance) => sum + balance.remainingAmount, 0),
-    [outstandingBalances],
+  const visibleProducts = useMemo(
+    () => products
+      .filter((product) => product.active || (product.lastKnownQuantity ?? 0) > 0)
+      .sort((left, right) => (right.lastKnownQuantity ?? 0) - (left.lastKnownQuantity ?? 0)),
+    [products],
   );
 
   if (isLoading) {
-    return (
-      <VStack py={12}>
-        <Spinner size="xl" color="brand.400" />
-      </VStack>
-    );
+    return <VStack py={12}><Spinner size="xl" color="brand.400" /></VStack>;
   }
 
   if (errorMessage) {
     return (
-        <SectionCard title="Couldn’t load Trustally">
+      <SectionCard title="Couldn’t load Trustally">
         <Text color="caution.600">{errorMessage}</Text>
-        <Button mt={4} onClick={() => void load(currentLocationId)}>
-          Try again
-        </Button>
+        <Button mt={4} onClick={() => void load()}>Try again</Button>
       </SectionCard>
     );
   }
 
   if (!dashboard?.hasSetup) {
     return (
-      <SectionCard eyebrow="Set up your box" title="Tell Trustally what’s in the honesty box right now.">
-        <Text color="canvas.700">
-          This creates your initial inventory snapshot and starts Cycle #1. No sales or honesty results are created yet.
-        </Text>
-        <Button as={Link} to="/setup" mt={5}>
-          Start tracking
-        </Button>
+      <SectionCard eyebrow="Get started" title="Set up your box">
+        <Text color="canvas.700">Add the products currently in the box to start the first cycle.</Text>
+        <Button as={Link} to="/setup" mt={4}>Start setup</Button>
       </SectionCard>
     );
   }
 
-  const visibleProducts = products
-    .filter((product) => product.active || (product.lastKnownQuantity ?? 0) > 0)
-    .sort((left, right) => (right.lastKnownQuantity ?? 0) - (left.lastKnownQuantity ?? 0));
-
-  const derivedBoxUnits = visibleProducts.reduce(
-    (sum, product) => sum + (product.lastKnownQuantity ?? 0),
-    0,
-  );
-  const derivedRetailValue = visibleProducts.reduce(
+  const derivedRetail = visibleProducts.reduce(
     (sum, product) => sum + (product.lastKnownQuantity ?? 0) * product.currentSellingPrice,
     0,
   );
-  const cycleStartedAt = dashboard.currentCycle?.startedAt ?? latestStockEntry?.happenedAt ?? null;
-  const lastCheckedAt = latestBoxCheckEntry?.happenedAt ?? dashboard.currentCycle?.lastCheckedAt ?? null;
-  const lastLoadedQuantity =
-    latestStockEntry?.quantity ??
-    dashboard.currentCycle?.startingBoxStock ??
-    derivedBoxUnits;
-  const retailValue =
-    (dashboard.currentCycle?.retailValue ?? 0) > 0
-      ? dashboard.currentCycle?.retailValue ?? 0
-      : derivedRetailValue;
+  const retailValue = (dashboard.currentCycle?.retailValue ?? 0) || derivedRetail;
+  const recent = dashboard.recentResult;
+  const collected = payments?.summary.totalPayments ?? recent?.totalCollected ?? 0;
+  const online = payments ? summarizeOnlinePayments(payments.records) : null;
+  const shareComparison = setAside ? calculateSetAsideShareComparison(setAside) : null;
+  const actual = setAside?.actualSetAside;
+  const fundBalances = setAside?.fundBalances;
 
-  const cycleCashMovements = cashMovements.filter((movement) =>
-    cycleStartedAt ? new Date(movement.occurredAt).getTime() >= new Date(cycleStartedAt).getTime() : false,
-  );
-  const cashRemovedSinceLastVisit = cycleCashMovements
-    .filter((movement) => movement.type === "CASH_REMOVED")
-    .reduce((sum, movement) => sum + movement.amount, 0);
-  const cashReturnedSinceLastVisit = cycleCashMovements
-    .filter((movement) => movement.type === "CASH_RETURNED")
-    .reduce<(typeof cycleCashMovements)[number] | null>((latest, movement) => (
-      !latest || new Date(movement.occurredAt).getTime() > new Date(latest.occurredAt).getTime()
-        ? movement
-        : latest
-    ), null)?.amount ?? 0;
-  const estimatedPhysicalCash = currentCashFloat?.openingChangeFloat == null
-    ? null
-    : Math.max(currentCashFloat.openingChangeFloat - cashRemovedSinceLastVisit, 0);
-  const isLatestMetrics = metricsRange === "latest";
-  const metricsAvailable = isLatestMetrics ? Boolean(dashboard.recentResult) : Boolean(rangeMetrics);
-  const metricsTitle = isLatestMetrics
-    ? dashboard.recentResult?.label ?? "No completed checks yet"
-    : metricsRange === "custom"
-      ? formatReportDateRange(customStartDate, customEndDate)
-      : metricsRangeOptions.find((option) => option.value === metricsRange)?.label ?? "Selected period";
-  const metricsHonestyRate = isLatestMetrics ? recentHonesty?.summary.disclosureRate ?? null : rangeMetrics?.summary.disclosureRate ?? null;
-  const metricsPaymentTotal = isLatestMetrics
-    ? recentCyclePayments?.summary.totalPayments ?? recentHonesty?.summary.totalPayments ?? dashboard.recentResult?.immediatePayments ?? 0
-    : rangeMetrics?.summary.totalPayments ?? 0;
-  const metricsRequiredAmount = isLatestMetrics
-    ? recentHonesty?.summary.currentlyDueAmount ?? dashboard.recentResult?.expectedRevenue ?? 0
-    : rangeMetrics?.summary.paymentRequiredAmount ?? 0;
-  const metricsCollectionRate = metricsRequiredAmount > 0
-    ? Math.min((metricsPaymentTotal / metricsRequiredAmount) * 100, 100)
+  const reserveRows: ReserveRow[] = setAside && shareComparison ? [
+    reserveRow(
+      "puresafe",
+      "Puresafe",
+      fundBalances?.puresafe.goal ?? setAside.puresafeReserveGoalSnapshot ?? shareComparison.puresafe.target,
+      fundBalances?.puresafe.physicalBalance ?? actual?.puresafeCapital,
+      null,
+      [
+        ["Cycle target", moneyOrNotRecorded(shareComparison.puresafe.target)],
+        ["Physical balance", moneyOrNotRecorded(fundBalances?.puresafe.physicalBalance)],
+        ["Credit awaiting cash", moneyOrNotRecorded(fundBalances?.puresafe.creditAwaitingCash)],
+        ["Funded balance", moneyOrNotRecorded(fundBalances?.puresafe.fundedBalance)],
+      ],
+    ),
+    reserveRow(
+      "other-products",
+      "Other Products",
+      fundBalances?.otherProducts.goal ?? setAside.otherProductsReserveGoalSnapshot ?? shareComparison.otherProducts.target,
+      fundBalances?.otherProducts.physicalBalance ?? actual?.otherProductsCapital,
+      null,
+      [
+        ["Cycle target", moneyOrNotRecorded(shareComparison.otherProducts.target)],
+        ["Physical balance", moneyOrNotRecorded(fundBalances?.otherProducts.physicalBalance)],
+        ["Credit awaiting cash", moneyOrNotRecorded(fundBalances?.otherProducts.creditAwaitingCash)],
+        ["Funded balance", moneyOrNotRecorded(fundBalances?.otherProducts.fundedBalance)],
+        ["Used for restocks", moneyOrNotRecorded(setAside.otherProductsReserve?.usedForRestocks)],
+      ],
+    ),
+    reserveRow(
+      "electricity",
+      "Electricity",
+      fundBalances?.electricity.goal ?? setAside.electricityReserveGoalSnapshot ?? shareComparison.electricity.target,
+      fundBalances?.electricity.physicalBalance ?? actual?.electricityShare,
+      null,
+      [
+        ["Cycle target", moneyOrNotRecorded(shareComparison.electricity.target)],
+        ["Running hours", `${setAside.cycleHours.toFixed(1)} hours`],
+        ["Cost per hour", formatCurrency(setAside.electricityCostPerHour)],
+        ["Credit awaiting cash", moneyOrNotRecorded(fundBalances?.electricity.creditAwaitingCash)],
+        ["Funded balance", moneyOrNotRecorded(fundBalances?.electricity.fundedBalance)],
+      ],
+    ),
+    reserveRow(
+      "savings",
+      "Savings",
+      shareComparison.contingency.target,
+      fundBalances?.contingency.physicalBalance ?? actual?.contingency ?? null,
+      null,
+      [
+        ["Physical cash", moneyOrNotRecorded(fundBalances?.contingency.physicalBalance ?? actual?.contingency)],
+        ["Credit awaiting cash", moneyOrNotRecorded(fundBalances?.contingency.creditAwaitingCash ?? actual?.creditContingency)],
+        ["Funded balance", moneyOrNotRecorded(fundBalances?.contingency.fundedBalance)],
+      ],
+    ),
+  ] : [];
+
+  const stashCash = stashRange === "latest"
+    ? actual?.toStashCash ?? null
+    : stashReport?.summary.actualToStashCash ?? null;
+  const stashOnline = stashRange === "latest"
+    ? actual?.onlineToStash ?? setAside?.onlineToStash ?? 0
+    : stashReport?.summary.onlineToStash ?? 0;
+  const stashTotal = stashCash == null ? null : stashCash + stashOnline;
+  const stashChannels = stashRange === "latest"
+    ? {
+        gcash: online?.gcashPayments ?? setAside?.gcashPayments ?? 0,
+        maya: online?.mayaPayments ?? setAside?.mayaPayments ?? 0,
+        unionbank: online?.unionbankPayments ?? setAside?.unionbankPayments ?? 0,
+        bpi: online?.bpiPayments ?? setAside?.bpiPayments ?? 0,
+        bank: online?.legacyBankPayments ?? setAside?.legacyBankPayments ?? 0,
+        other: online?.otherOnlinePayments ?? setAside?.otherOnlinePayments ?? 0,
+      }
+    : {
+        gcash: stashReport?.summary.gcashToStash ?? 0,
+        maya: stashReport?.summary.mayaPayments ?? 0,
+        unionbank: stashReport?.summary.unionbankPayments ?? 0,
+        bpi: stashReport?.summary.bpiPayments ?? 0,
+        bank: stashReport?.summary.legacyBankPayments ?? 0,
+        other: stashReport?.summary.otherOnlineToStash ?? 0,
+      };
+  const totalReserveCashOnHand = reserveRows.every((row) => row.actual != null)
+    ? reserveRows.reduce((sum, row) => sum + (row.actual ?? 0), 0)
     : null;
-  const metricsUnaccounted = Math.max(metricsRequiredAmount - metricsPaymentTotal, 0);
-  const metricsPaymentGap = metricsUnaccounted;
-  const metricsPayLaterOutstanding = isLatestMetrics
-    ? outstandingBalances
-        .filter((balance) => balance.sourceCycleId === dashboard.recentResult?.cycleId)
-        .reduce((total, balance) => total + balance.remainingAmount, 0)
-    : (rangeMetrics?.reportPayLaterBalances ?? []).reduce((total, balance) => total + balance.remainingAmount, 0);
-  const metricsExpectedCollection = isLatestMetrics
-    ? metricsRequiredAmount
-    : rangeMetrics?.summary.paymentRequiredAmount ?? 0;
-  const metricsActualCollection = metricsPaymentTotal;
-  const metricsCashPayments = isLatestMetrics
-    ? recentCyclePayments?.summary.cashPayments ?? recentHonesty?.summary.physicalCashCollected ?? 0
-    : rangeMetrics?.summary.cashPayments ?? 0;
-  const metricsOnlinePayments = isLatestMetrics
-    ? recentCyclePayments?.summary.onlinePayments ?? recentHonesty?.summary.onlinePayments ?? 0
-    : rangeMetrics?.summary.onlinePayments ?? 0;
-  const metricsPaymentRecords = isLatestMetrics
-    ? recentCyclePayments?.records ?? []
-    : rangeMetrics?.reportPaymentRecords ?? [];
-  const metricsOnlineBreakdown = summarizeOnlinePayments(metricsPaymentRecords);
-  const metricsSelfReported = isLatestMetrics ? recentHonesty?.summary.selfReportedBottles ?? 0 : rangeMetrics?.summary.selfReportedBottles ?? 0;
-  const metricsUnattributed = isLatestMetrics ? recentHonesty?.summary.unattributedMissingBottles ?? 0 : rangeMetrics?.summary.unattributedMissingBottles ?? 0;
-  const metricsUnclassified = isLatestMetrics ? recentHonesty?.summary.unclassifiedHistoricalRecords ?? 0 : rangeMetrics?.summary.unclassifiedHistoricalRecords ?? 0;
-  const metricsGrossSales = metricsPaymentTotal;
-  const metricsPuresafeCapital = isLatestMetrics
-    ? recentSetAside?.puresafeCapital ?? null
-    : rangeSetAside?.summary.puresafeCapital ?? null;
-  const metricsMiscCapital = isLatestMetrics
-    ? recentSetAside?.miscCapital ?? null
-    : rangeSetAside?.summary.miscCapital ?? null;
-  const metricsTotalCapital = metricsPuresafeCapital == null || metricsMiscCapital == null
-    ? null
-    : metricsPuresafeCapital + metricsMiscCapital;
-  const metricsGrossProfit = metricsTotalCapital == null
-    ? null
-    : metricsGrossSales - metricsTotalCapital;
-  const recentSetAsideShares = recentSetAside ? calculateSetAsideShareComparison(recentSetAside) : null;
-  const displayedRecentSetAside = recentSetAside ? {
-    ...recentSetAside,
-    gcashPayments: metricsOnlineBreakdown.gcashPayments,
-    mayaPayments: metricsOnlineBreakdown.mayaPayments,
-    otherOnlinePayments: metricsOnlineBreakdown.otherOnlinePayments,
-  } : null;
-  const rangeSetAsideShares = rangeSetAside ? calculateReportSetAsideShareComparison(rangeSetAside) : null;
-  const rangeActualComplete = Boolean(rangeSetAside && (rangeSetAside.summary.actualRecordedCycles ?? 0) > 0 && (rangeSetAside.summary.actualUnrecordedCycles ?? 0) === 0);
-  const rangeTotalTargets = rangeSetAsideShares?.puresafe.target == null || rangeSetAsideShares.otherProducts.target == null || rangeSetAsideShares.toStash.target == null
-    ? null : rangeSetAsideShares.puresafe.target + rangeSetAsideShares.otherProducts.target + rangeSetAsideShares.electricity.target + rangeSetAsideShares.contingency.target + rangeSetAsideShares.toStash.target;
-  const rangeActualToStashTotal = rangeSetAside?.summary.actualToStashCash == null ? null
-    : rangeSetAside.summary.actualToStashCash + (rangeSetAside.summary.onlineToStash ?? 0);
-  const recentCycleRoute = dashboard.recentResult?.cycleId ? `/history/${dashboard.recentResult.cycleId}` : "/history";
-  const latestUnaccounted = recentHonesty && recentCyclePayments
-    ? Math.max(recentHonesty.summary.currentlyDueAmount - recentCyclePayments.summary.totalPayments, 0)
-    : dashboard.recentResult?.unaccountedAmount ?? 0;
-  const metricsDetailRoute = isLatestMetrics
-    ? recentCycleRoute
-    : "/reports";
-  const showDetail = (title: string, description: string, values: Array<[string, string]>, route = metricsDetailRoute, routeLabel = isLatestMetrics ? "View full cycle" : "Open reports") => {
-    setDashboardDetail({ title, description, values, route, routeLabel });
-  };
+  const totalReserveCashStillNeeded = reserveRows.every((row) => row.remaining != null)
+    ? reserveRows.reduce((sum, row) => sum + (row.remaining ?? 0), 0)
+    : null;
 
   return (
-    <Stack spacing={5} width="100%" minWidth={0}>
-      <SectionCard eyebrow="Current cycle" title={dashboard.locationName ?? "Your box"} minW={0} collapsible collapseKey="dashboard-current-cycle">
-        <Box
-          as="button"
-          width="100%"
-          textAlign="left"
-          cursor="pointer"
-          onClick={() => showDetail("Current cycle", "The live box state since the last completed check.", [["Last checked", formatDateTimeLabel(lastCheckedAt)], ["Running for", formatDurationFromNow(cycleStartedAt)], ["Last loaded", formatCount(lastLoadedQuantity)], ["Pay-later outstanding", outstandingBalances.length ? formatCurrency(outstandingAmount) : "None"]], "/check-box", "Open box check")}
-          bg="linear-gradient(180deg, rgba(25, 53, 82, 0.9) 0%, rgba(14, 31, 49, 0.86) 100%)"
-          borderRadius="24px"
-          border="1px solid"
-          borderColor="rgba(142, 182, 215, 0.16)"
-          boxShadow="0 16px 32px rgba(1, 10, 20, 0.28)"
-          px={{ base: 2, md: 3 }}
-          py={2}
-        >
-          <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }}>
-            <CompactCycleStat label="Last checked" value={formatDateTimeLabel(lastCheckedAt)} />
-            <CompactCycleStat label="Running for" value={formatDurationFromNow(cycleStartedAt)} />
-            <CompactCycleStat label="Last loaded" value={formatCount(lastLoadedQuantity)} />
-            <CompactCycleStat
-              label={outstandingBalances.length ? "Pay-later outstanding" : "Known pay-later"}
-              value={outstandingBalances.length ? formatCurrency(outstandingAmount) : "None"}
-            />
+    <Stack spacing={5}>
+      <SectionCard eyebrow="Current cycle" title={`Cycle ${dashboard.currentCycle?.cycleNumber ?? ""}`}>
+        <SimpleGrid columns={{ base: 2, md: 3 }} spacing={3}>
+          <CompactValue label="Last checked" value={lastCheckedAt ? formatDateTimeLabel(lastCheckedAt) : "Not checked"} />
+          <CompactValue label="Running" value={dashboard.currentCycle?.startedAt ? formatDurationFromNow(dashboard.currentCycle.startedAt) : "—"} />
+          <CompactValue label="Retail value" value={formatCurrency(retailValue)} />
+        </SimpleGrid>
+        <HStack mt={4} spacing={3} overflowX="auto" pb={1}>
+          <Button onClick={() => setIsContentsOpen(true)} variant="outline" flexShrink={0}>Box contents</Button>
+          <Button as={Link} to="/check-box" flexShrink={0}>Check box</Button>
+        </HStack>
+      </SectionCard>
+
+      <SectionCard eyebrow="Latest check" title={recent?.label ?? "No completed check yet"}>
+        {recent ? (
+          <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3}>
+            <MetricCard label="Expected sales" value={formatCurrency(recent.expectedRevenue)} onClick={() => setDetail({ title: "Expected sales", description: "Sales expected from bottles taken in this check.", values: [["Bottles taken", String(recent.bottlesTaken)]] })} />
+            <MetricCard label="Payments collected" value={formatCurrency(collected)} onClick={() => setDetail({ title: "Payments collected", description: "Customer payments assigned to this cycle, including payments recorded earlier.", values: [["Cash", formatCurrency(payments?.summary.cashPayments ?? 0)], ["Online", formatCurrency(payments?.summary.onlinePayments ?? 0)], ["Known pay-later", formatCurrency(recent.knownPayLater)]] })} />
+            <MetricCard label="Unexplained gap" value={formatCurrency(recent.unaccountedAmount)} onClick={() => setDetail({ title: "Unexplained gap", description: "Expected sales not explained by payments or known pay-later amounts.", values: [["Expected", formatCurrency(recent.expectedRevenue)], ["Collected", formatCurrency(collected)], ["Known pay-later", formatCurrency(recent.knownPayLater)]] })} />
           </SimpleGrid>
+        ) : <Text color="canvas.700">Complete a box check to see the latest result.</Text>}
+        {recent ? <Button as={Link} to={`/history/${recent.cycleId}`} size="sm" variant="ghost" mt={3}>View completed check</Button> : null}
+      </SectionCard>
+
+      <SectionCard eyebrow="Set aside" title="Latest completed check">
+        {setAside ? (
+          <Stack spacing={3}>
+            <SimpleGrid columns={2} spacing={3}>
+              <CompactTotalCard label="Total cash on hand" value={moneyOrNotRecorded(totalReserveCashOnHand)} />
+              <CompactTotalCard label="Cash still needed" value={moneyOrNotRecorded(totalReserveCashStillNeeded)} />
+            </SimpleGrid>
+            {reserveRows.map((row) => (
+              <Button
+                key={row.key}
+                variant="ghost"
+                height="auto"
+                p={4}
+                bg="canvas.50"
+                borderRadius="22px"
+                justifyContent="stretch"
+                onClick={() => setDetail(row.detail)}
+              >
+                <Box width="100%" textAlign="left">
+                  <Text fontWeight="900">{row.label}</Text>
+                  <SimpleGrid columns={3} spacing={2} mt={2}>
+                    <MiniValue label="Goal" value={moneyOrNotRecorded(row.goal)} />
+                    <MiniValue label="Cash on hand" value={moneyOrNotRecorded(row.actual)} />
+                    <MiniValue label="Still needed" value={moneyOrNotRecorded(row.remaining)} />
+                  </SimpleGrid>
+                  <Progress
+                    value={progressPercent(row.actual, row.goal)}
+                    mt={3}
+                    size="sm"
+                    borderRadius="full"
+                    colorScheme={row.goal != null && row.actual != null && row.actual >= row.goal ? "green" : "cyan"}
+                    aria-label={`${row.label} set-aside progress`}
+                  />
+                </Box>
+              </Button>
+            ))}
+            <Button onClick={() => setIsActualOpen(true)}>
+              {actual ? "Update actual set aside" : "Record actual set aside"}
+            </Button>
+          </Stack>
+        ) : <Text color="canvas.700">Set-aside details will appear after the first completed check.</Text>}
+      </SectionCard>
+
+      <SectionCard eyebrow="To Stash" title="Cash and online payments">
+        <Box overflowX="auto" maxW="100%" pb={1}>
+          <HStack spacing={2} width="max-content">
+            {stashRangeOptions.map((option) => (
+              <Button
+                key={option.value}
+                size="sm"
+                flexShrink={0}
+                variant={stashRange === option.value ? "solid" : "outline"}
+                onClick={() => {
+                  if (option.value === "custom") setIsStashDateOpen(true);
+                  else setStashRange(option.value);
+                }}
+              >
+                {option.value === "custom" && stashRange === "custom"
+                  ? formatReportDateRange(stashStartDate, stashEndDate)
+                  : option.label}
+              </Button>
+            ))}
+          </HStack>
         </Box>
-        <SwipeableButtonRow mt={5} ariaLabel="Dashboard actions">
-          <Button as={Link} to="/check-box" flexShrink={0}>
-            Check box
-          </Button>
-          <Button as={Link} to="/stock" variant="outline" flexShrink={0}>
-            + Add stock
-          </Button>
-          <Button as={Link} to="/pay-later" variant="outline" flexShrink={0}>
-            Record pay-later
-          </Button>
-          <Button as={Link} to="/payments" variant="outline" flexShrink={0}>
-            Record payment
-          </Button>
-          <Button as={Link} to="/cash-movements" variant="outline" flexShrink={0}>
-            Cash removed
-          </Button>
-          <Button as={Link} to="/expenses" variant="outline" flexShrink={0}>
-            Add expense
-          </Button>
-        </SwipeableButtonRow>
-      </SectionCard>
 
-      <BusinessPerformance cycleStartedAt={dashboard.currentCycle?.startedAt} />
-
-      <SectionCard eyebrow="Cash status" title="Cash position and explained amounts" collapsible collapseKey="dashboard-cash-status">
-        <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={4}>
-          <MetricCard
-            label="Estimated in box"
-            value={formatCurrency(estimatedPhysicalCash)}
-            hint={
-              estimatedPhysicalCash == null
-                ? "Opening change float is unknown"
-                : "Known opening float less recorded withdrawals; excludes uncounted customer cash"
-            }
-            onClick={() => showDetail("Estimated cash in box", "This is the last known change float adjusted by recorded cash movements in the current cycle.", [["Opening change float", formatCurrency(currentCashFloat?.openingChangeFloat)], ["Cash removed", formatCurrency(cashRemovedSinceLastVisit)], ["Estimated in box", formatCurrency(estimatedPhysicalCash)]], "/cash-movements", "View cash movements")}
-          />
-          <MetricCard
-            label="Unaccounted"
-            value={formatCurrency(latestUnaccounted)}
-            hint="Not yet explained by payment, pay-later, or an authorized adjustment"
-            onClick={() => showDetail("Unaccounted amount", "The required amount that has not yet been matched to a recorded payment.", [["Currently due", formatCurrency(recentHonesty?.summary.currentlyDueAmount)], ["Recorded payments", formatCurrency(recentCyclePayments?.summary.totalPayments)], ["Unaccounted", formatCurrency(latestUnaccounted)]], recentCycleRoute, "View full cycle")}
-          />
-          <MetricCard
-            label="Known pay-later"
-            value={formatCurrency(recentHonesty?.summary.payLaterAmount ?? dashboard.recentResult?.knownPayLater ?? 0)}
-            hint="Recorded as expected later"
-            onClick={() => showDetail("Known pay-later", "Amounts explicitly recorded as expected later remain visible until settled.", [["Recorded pay-later", formatCurrency(recentHonesty?.summary.payLaterAmount ?? dashboard.recentResult?.knownPayLater)], ["Open balance", formatCurrency(outstandingAmount)]], "/payments", "View balances")}
-          />
-          <MetricCard
-            label="Complimentary value"
-            value={formatCurrency(recentHonesty?.summary.complimentaryValue ?? 0)}
-            hint={recentHonesty ? `${recentHonesty.summary.complimentaryBottles} complimentary bottle${recentHonesty.summary.complimentaryBottles === 1 ? "" : "s"}` : "No classified complimentary bottles"}
-            onClick={() => showDetail("Complimentary value", "These bottles were classified as complimentary, so they are excluded from payment due.", [["Bottles", String(recentHonesty?.summary.complimentaryBottles ?? 0)], ["Value", formatCurrency(recentHonesty?.summary.complimentaryValue)]], recentCycleRoute, "View full cycle")}
-          />
-        </SimpleGrid>
-        <Text color="canvas.700" mt={3} fontSize="sm">
-          Cash movements since last visit: {formatCurrency(cashRemovedSinceLastVisit)} removed · {formatCurrency(cashReturnedSinceLastVisit)} latest legacy Left for Change
-        </Text>
-        {recentCashFloat ? (
-          <Box mt={5}>
-            <Text fontWeight="900" mb={3}>Latest completed cash check</Text>
-            <SimpleGrid columns={{ base: 1, sm: 2, md: 5 }} spacing={4}>
-              <MetricCard label="Opening change float" value={recentCashFloat.openingChangeFloat == null ? "Unknown" : formatCurrency(recentCashFloat.openingChangeFloat)} hint="View completed cash check" onClick={() => showDetail("Opening change float", "Cash already in the box when the completed cycle began.", [["Opening", recentCashFloat.openingChangeFloat == null ? "Unknown" : formatCurrency(recentCashFloat.openingChangeFloat)], ["Source", recentCashFloat.openingChangeFloatSource]])} />
-              <MetricCard label="Cash counted" value={formatCurrency(recentCashFloat.cashCountedBeforeWithdrawal)} hint="View completed cash check" onClick={() => showDetail("Cash counted", "Physical cash counted before the cycle withdrawal.", [["Counted", formatCurrency(recentCashFloat.cashCountedBeforeWithdrawal)], ["Left for Change", formatCurrency(recentCashFloat.closingChangeFloat)], ["Withdrawn", formatCurrency(recentCashFloat.cashWithdrawn)]])} />
-              <MetricCard label="Cash generated" value={recentCashFloat.cashGenerated == null ? "Cannot be determined" : formatCurrency(recentCashFloat.cashGenerated)} hint="View calculation" onClick={() => showDetail("Customer cash generated", "Counted cash plus interim withdrawals, less opening float and tracked non-sales additions.", [["Cash counted", formatCurrency(recentCashFloat.cashCountedBeforeWithdrawal)], ["Interim withdrawals", formatCurrency(recentCashFloat.interimOwnerWithdrawals)], ["Opening float", formatCurrency(recentCashFloat.openingChangeFloat)], ["Generated", recentCashFloat.cashGenerated == null ? "Cannot be determined" : formatCurrency(recentCashFloat.cashGenerated)]])} />
-              <MetricCard label="Left for Change" value={formatCurrency(recentCashFloat.closingChangeFloat)} hint="View completed cash check" onClick={() => showDetail("Left for Change", "Physical cash deliberately left in the box for the next cycle.", [["Left for Change", formatCurrency(recentCashFloat.closingChangeFloat)], ["Cash counted", formatCurrency(recentCashFloat.cashCountedBeforeWithdrawal)]])} />
-              <MetricCard label="Cash withdrawn" value={formatCurrency(recentCashFloat.cashWithdrawn)} hint="View completed cash check" onClick={() => showDetail("Cash withdrawn", "Cash counted minus the amount left for change.", [["Cash counted", formatCurrency(recentCashFloat.cashCountedBeforeWithdrawal)], ["Left for Change", formatCurrency(recentCashFloat.closingChangeFloat)], ["Withdrawn", formatCurrency(recentCashFloat.cashWithdrawn)]])} />
+        {isStashLoading ? <Spinner mt={5} color="brand.400" /> : stashError ? (
+          <Text mt={5} color="caution.600">{stashError}</Text>
+        ) : (
+          <Stack spacing={4} mt={5}>
+            <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3}>
+              <MetricCard label="Total To Stash" value={moneyOrNotRecorded(stashTotal)} />
+              <MetricCard label="Cash" value={moneyOrNotRecorded(stashCash)} />
+              <MetricCard label="Online" value={formatCurrency(stashOnline)} />
             </SimpleGrid>
-          </Box>
-        ) : null}
-      </SectionCard>
-
-      <SectionCard eyebrow="Metrics" title={metricsTitle} minW={0} collapsible collapseKey="dashboard-metrics">
-        <SwipeableButtonRow mb={4} ariaLabel="Dashboard reporting ranges">
-          {metricsRangeOptions.map((option) => (
-            <Button
-              key={option.value}
-              size="sm"
-              flexShrink={0}
-              variant={metricsRange === option.value ? "solid" : "outline"}
-              onClick={() => {
-                if (option.value === "custom") {
-                  setIsDateRangeOpen(true);
-                } else {
-                  setMetricsRange(option.value);
-                }
-              }}
-            >
-              {option.value === "custom" && metricsRange === "custom"
-                ? formatReportDateRange(customStartDate, customEndDate)
-                : option.label}
-            </Button>
-          ))}
-        </SwipeableButtonRow>
-        {isMetricsLoading ? <Spinner color="brand.400" /> : metricsError ? (
-          <Text color="caution.600">{metricsError}</Text>
-        ) : metricsAvailable ? (
-          <Stack spacing={3}>
-          <SimpleGrid columns={{ base: 1, sm: 2, md: 3, xl: 5 }} spacing={4}>
-            <MetricCard
-              label="Honesty rate"
-              value={formatPercent(metricsHonestyRate)}
-              hint={`Disclosure honesty · ${metricsSelfReported} self-reported · ${metricsUnattributed} unattributed`}
-              onClick={() => showDetail("Disclosure honesty", "Only quantities attributed to a person and marked self-reported count in the disclosure rate.", [["Self-reported", String(metricsSelfReported)], ["Unattributed", String(metricsUnattributed)], ["Disclosure rate", formatPercent(metricsHonestyRate)]])}
-            />
-            <MetricCard
-              label="Collection rate"
-              value={metricsCollectionRate == null ? "Payment not required" : formatPercent(metricsCollectionRate)}
-              hint={metricsPaymentGap > 0 ? `${formatCurrency(metricsPaymentGap)} required payment gap` : "No required payment gap"}
-              onClick={() => showDetail("Collection rate", "Recorded payments compared with the amount currently due.", [["Currently due", formatCurrency(metricsRequiredAmount)], ["Recorded payments", formatCurrency(metricsPaymentTotal)], ["Collection rate", metricsCollectionRate == null ? "Payment not required" : formatPercent(metricsCollectionRate)]])}
-            />
-            <MetricCard label="Unaccounted" value={formatCurrency(metricsUnaccounted)} hint="View calculation" onClick={() => showDetail("Unaccounted amount", "Currently due less all recorded payments in this period.", [["Currently due", formatCurrency(metricsRequiredAmount)], ["Payments", formatCurrency(metricsPaymentTotal)], ["Unaccounted", formatCurrency(metricsUnaccounted)]])} />
-            <MetricCard
-              label="Cash payments"
-              value={formatCurrency(metricsCashPayments)}
-              hint="Click to view cash payment details"
-              onClick={() => setPaymentDetailView("cash")}
-            />
-            <MetricCard
-              label="Online payments"
-              value={formatCurrency(metricsOnlinePayments)}
-              hint="Click to view online payment details"
-              onClick={() => setPaymentDetailView("online")}
-            />
-            {metricsPayLaterOutstanding > 0 ? (
-              <MetricCard
-                label="Outstanding"
-                value={formatCurrency(metricsPayLaterOutstanding)}
-                hint="Remaining known pay-later balance"
-                onClick={() => showDetail("Outstanding pay-later", "Known balances that still have an amount remaining.", [["Outstanding", formatCurrency(metricsPayLaterOutstanding)], ["Balances", String(isLatestMetrics ? outstandingBalances.filter((balance) => balance.sourceCycleId === dashboard.recentResult?.cycleId).length : rangeMetrics?.reportPayLaterBalances.length ?? 0)]], "/payments", "View balances")}
-              />
-            ) : null}
-            <MetricCard
-              label="Expected vs actual collection"
-              value={`${formatCurrency(metricsExpectedCollection)} / ${formatCurrency(metricsActualCollection)}`}
-              hint="Expected due / actually collected"
-              onClick={() => showDetail("Expected vs actual collection", "Compares the amount currently due with all recorded cash and online payments.", [["Expected due", formatCurrency(metricsExpectedCollection)], ["Actually collected", formatCurrency(metricsActualCollection)], ["Gap", formatCurrency(metricsPaymentGap)]])}
-            />
-          </SimpleGrid>
-          <Box pt={2}>
-            <Text fontWeight="900" mb={3}>Sales</Text>
-            <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={4}>
-              <MetricCard
-                label="Gross sales"
-                value={formatCurrency(metricsGrossSales)}
-                hint="Actual recorded payments · Click to view"
-                onClick={() => setPaymentDetailView("all")}
-              />
-              <MetricCard label="Total Capital" value={metricsTotalCapital == null ? "Unable to calculate" : formatCurrency(metricsTotalCapital)} hint="View calculation" onClick={() => showDetail("Total capital", "Replacement capital for Puresafe plus all other depleted products.", [["Puresafe", metricsPuresafeCapital == null ? "Unable to calculate" : formatCurrency(metricsPuresafeCapital)], ["Other products", metricsMiscCapital == null ? "Unable to calculate" : formatCurrency(metricsMiscCapital)], ["Total", metricsTotalCapital == null ? "Unable to calculate" : formatCurrency(metricsTotalCapital)]])} />
-              <MetricCard label="Gross Profit" value={metricsGrossProfit == null ? "Unable to calculate" : formatCurrency(metricsGrossProfit)} hint="View calculation" onClick={() => showDetail("Gross profit", "Actual recorded sales less product replacement capital.", [["Gross sales", formatCurrency(metricsGrossSales)], ["Total capital", metricsTotalCapital == null ? "Unable to calculate" : formatCurrency(metricsTotalCapital)], ["Gross profit", metricsGrossProfit == null ? "Unable to calculate" : formatCurrency(metricsGrossProfit)]])} />
-            </SimpleGrid>
-          </Box>
-          {metricsUnclassified > 0 ? <Text color="canvas.700" mt={3}>{metricsUnclassified} historical record{metricsUnclassified === 1 ? " is" : "s are"} still unclassified.</Text> : null}
+            <Box bg="canvas.50" borderRadius="22px" p={4}>
+              <Text fontWeight="900">Online payments by source</Text>
+              <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3} mt={3}>
+                <MiniValue label="GCash" value={formatCurrency(stashChannels.gcash)} />
+                <MiniValue label="Maya" value={formatCurrency(stashChannels.maya)} />
+                <MiniValue label="UnionBank" value={formatCurrency(stashChannels.unionbank)} />
+                <MiniValue label="BPI" value={formatCurrency(stashChannels.bpi)} />
+                {stashChannels.bank > 0 ? <MiniValue label="Bank" value={formatCurrency(stashChannels.bank)} /> : null}
+                {stashChannels.other > 0 ? <MiniValue label="Other" value={formatCurrency(stashChannels.other)} /> : null}
+              </SimpleGrid>
+              <Text color="canvas.700" fontSize="sm" mt={3}>GCash goes directly to Stash. Maya and bank payments may first be earmarked for reserve credit; the Online total above shows what remains for Stash.</Text>
+            </Box>
           </Stack>
-        ) : (
-          <Text color="canvas.700">No completed cycles in this period.</Text>
         )}
       </SectionCard>
 
-      <SectionCard eyebrow="Set Aside" title={`${metricsTitle} reserves`} collapsible collapseKey="dashboard-set-aside">
-        {isMetricsLoading ? <Spinner color="brand.400" /> : metricsError ? (
-          <Text color="caution.600">{metricsError}</Text>
-        ) : isLatestMetrics && displayedRecentSetAside ? (
-          <SetAsideSummary value={displayedRecentSetAside} onRecordActual={() => setIsActualSetAsideOpen(true)} onMetricClick={(metric) => {
-            const detailMap: Record<string, DashboardDetail> = {
-              cashAvailableAfterChangeFloat: { title: "Cash available for reserves", description: "Cash available for set aside after preserving the closing change float.", values: [["Available cash", formatCurrency(displayedRecentSetAside.cashAvailableAfterChangeFloat)]] },
-              puresafeCapital: { title: "Puresafe capital", description: "Replacement cost reserved first from available cash.", values: [["Target", recentSetAsideShares?.puresafe.target == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.puresafe.target)], ["Can set aside", recentSetAsideShares?.puresafe.canSetAside == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.puresafe.canSetAside)], ["Bottles", String(displayedRecentSetAside.puresafeBottlesToReplace)], ["Cost per bottle", formatCurrency(displayedRecentSetAside.puresafeCostPerUnit)]] },
-              electricityShare: { title: "Electricity share", description: "Funded from cash remaining after Puresafe and other-products capital.", values: [["Target", recentSetAsideShares?.electricity.target == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.electricity.target)], ["Can set aside", recentSetAsideShares?.electricity.canSetAside == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.electricity.canSetAside)], ["Hours", displayedRecentSetAside.cycleHours.toFixed(2)], ["Rate", formatCurrency(displayedRecentSetAside.electricityCostPerHour)]] },
-              contingencyCapital: { title: "Contingency savings", description: "Receives contributions redirected from savings funds that already reached their goals.", values: [["Target", formatCurrency(recentSetAsideShares?.contingency.target ?? 0)], ["Can set aside", recentSetAsideShares?.contingency.canSetAside == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.contingency.canSetAside)], ["Saved", formatCurrency(displayedRecentSetAside.fundBalances?.contingency.balance ?? 0)]] },
-              miscCapital: { title: "Other-products capital", description: "Funded from cash remaining after Puresafe capital.", values: [["Target", recentSetAsideShares?.otherProducts.target == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.otherProducts.target)], ["Can set aside", recentSetAsideShares?.otherProducts.canSetAside == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.otherProducts.canSetAside)]] },
-              remainingEarnings: { title: "To Stash", description: "Untouched online payments plus cash remaining after all reserve shares.", values: [["Target", recentSetAsideShares?.toStash.target == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.toStash.target)], ["Can set aside", recentSetAsideShares?.toStash.canSetAside == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.toStash.canSetAside)], ["GCash", formatCurrency(metricsOnlineBreakdown.gcashPayments)], ["Maya", formatCurrency(metricsOnlineBreakdown.mayaPayments)], ...(metricsOnlineBreakdown.otherOnlinePayments > 0 ? [["Other online", formatCurrency(metricsOnlineBreakdown.otherOnlinePayments)] as [string, string]] : []), ["Cash after reserves", recentSetAsideShares?.toStash.cashAfterReserves == null ? "Unable to calculate" : formatCurrency(recentSetAsideShares.toStash.cashAfterReserves)]] },
-              shortfall: { title: "Cash shortfall", description: "How far available cash falls below the required reserves. Online payments are not used to cover it.", values: [["Cash shortfall", displayedRecentSetAside.shortfall == null ? "Unable to calculate" : formatCurrency(displayedRecentSetAside.shortfall)]] },
-            };
-            const selected = detailMap[metric];
-            if (selected) setDashboardDetail({ ...selected, route: metricsDetailRoute, routeLabel: "View full cycle" });
-          }} />
-        ) : !isLatestMetrics && rangeSetAside && rangeSetAsideShares ? (
-          <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={4}>
-            <MetricCard label="Cash available for reserves" value={formatCurrency(rangeSetAside.summary.cashAvailableAfterChangeFloat)} hint="After preserving change float" />
-            <MetricCard label="Total targets" value={rangeTotalTargets == null ? "Unable to calculate" : formatCurrency(rangeTotalTargets)} hint="All four shares" />
-            <MetricCard label="Actual Set Aside" value={rangeSetAside.summary.actualPhysicalTotal == null ? "Not recorded" : formatCurrency(rangeSetAside.summary.actualPhysicalTotal)} hint="Recorded physical cash" />
-            <MetricCard label="Used for restocks" value={rangeSetAside.summary.usedForOtherProductRestocks == null ? "Not tracked yet" : formatCurrency(rangeSetAside.summary.usedForOtherProductRestocks)} hint="Other Products purchases" />
-            <MetricCard label="Net Set Aside" value={rangeSetAside.summary.netOtherProductsSetAside == null ? "Not tracked yet" : formatCurrency(rangeSetAside.summary.netOtherProductsSetAside)} hint="Other Products actual less restocks" />
-            <MetricCard label="Opening reserve" value={rangeSetAside.summary.openingOtherProductsReserve == null ? "Not tracked yet" : formatCurrency(rangeSetAside.summary.openingOtherProductsReserve)} />
-            <MetricCard label="Closing reserve" value={rangeSetAside.summary.closingOtherProductsReserve == null ? "Not tracked yet" : formatCurrency(rangeSetAside.summary.closingOtherProductsReserve)} />
-            <SetAsideShareCard label="Puresafe Capital" target={rangeSetAsideShares.puresafe.target} canSetAside={rangeSetAsideShares.puresafe.canSetAside} showActual actual={rangeSetAside.summary.actualPuresafeCapital ?? null} actualComparisonAvailable={rangeActualComplete} onClick={() => showDetail("Puresafe capital", "Target compared with actual physical cash recorded for the included completed cycles.", [["Target", rangeSetAsideShares.puresafe.target == null ? "Unable to calculate" : formatCurrency(rangeSetAsideShares.puresafe.target)], ["Actual", rangeSetAside.summary.actualPuresafeCapital == null ? "Not recorded" : formatCurrency(rangeSetAside.summary.actualPuresafeCapital)]])} />
-            <SetAsideShareCard label="Other Products Capital" target={rangeSetAsideShares.otherProducts.target} canSetAside={rangeSetAsideShares.otherProducts.canSetAside} showActual actual={rangeSetAside.summary.actualOtherProductsCapital ?? null} actualComparisonAvailable={rangeActualComplete} onClick={() => showDetail("Other-products capital", "Actual physical cash adds to the reserve; other-product restocks automatically use it.", [["Target", rangeSetAsideShares.otherProducts.target == null ? "Unable to calculate" : formatCurrency(rangeSetAsideShares.otherProducts.target)], ["Actual set aside", rangeSetAside.summary.actualOtherProductsCapital == null ? "Not recorded" : formatCurrency(rangeSetAside.summary.actualOtherProductsCapital)], ["Used for restocks", rangeSetAside.summary.usedForOtherProductRestocks == null ? "Not tracked yet" : formatCurrency(rangeSetAside.summary.usedForOtherProductRestocks)], ["Net set aside", rangeSetAside.summary.netOtherProductsSetAside == null ? "Not tracked yet" : formatCurrency(rangeSetAside.summary.netOtherProductsSetAside)], ["Opening reserve", rangeSetAside.summary.openingOtherProductsReserve == null ? "Not tracked yet" : formatCurrency(rangeSetAside.summary.openingOtherProductsReserve)], ["Closing reserve", rangeSetAside.summary.closingOtherProductsReserve == null ? "Not tracked yet" : formatCurrency(rangeSetAside.summary.closingOtherProductsReserve)]])}>
-              <Text>Used for restocks: {rangeSetAside.summary.usedForOtherProductRestocks == null ? "Not tracked yet" : formatCurrency(rangeSetAside.summary.usedForOtherProductRestocks)}</Text><Text>Net set aside: {rangeSetAside.summary.netOtherProductsSetAside == null ? "Not tracked yet" : formatCurrency(rangeSetAside.summary.netOtherProductsSetAside)}</Text><Text>Reserve: {rangeSetAside.summary.openingOtherProductsReserve == null ? "Not tracked" : formatCurrency(rangeSetAside.summary.openingOtherProductsReserve)} opening · {rangeSetAside.summary.closingOtherProductsReserve == null ? "Not tracked" : formatCurrency(rangeSetAside.summary.closingOtherProductsReserve)} closing</Text>
-            </SetAsideShareCard>
-            <SetAsideShareCard label="Electricity Share" target={rangeSetAsideShares.electricity.target} canSetAside={rangeSetAsideShares.electricity.canSetAside} showActual actual={rangeSetAside.summary.actualElectricityShare ?? null} actualComparisonAvailable={rangeActualComplete} onClick={() => showDetail("Electricity share", "Target compared with actual physical cash recorded for the included completed cycles.", [["Target", formatCurrency(rangeSetAsideShares.electricity.target)], ["Actual", rangeSetAside.summary.actualElectricityShare == null ? "Not recorded" : formatCurrency(rangeSetAside.summary.actualElectricityShare)]])} />
-            <SetAsideShareCard label="Contingency Savings" target={rangeSetAsideShares.contingency.target} canSetAside={rangeSetAsideShares.contingency.canSetAside} showActual actual={rangeSetAside.summary.actualContingency ?? null} actualComparisonAvailable={rangeActualComplete} hint="Redirected from funds that reached their goals" onClick={() => showDetail("Contingency savings", "Contributions redirected from full Puresafe, Other Products, or Electricity funds.", [["Target", formatCurrency(rangeSetAsideShares.contingency.target)], ["Actual", rangeSetAside.summary.actualContingency == null ? "Not recorded" : formatCurrency(rangeSetAside.summary.actualContingency)], ["Saved", formatCurrency(rangeSetAside.summary.fundBalances?.contingency.balance ?? 0)]])} />
-            <MetricCard label="Cash shortfall" value={rangeSetAside.summary.shortfall == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.shortfall)} hint="View by cycle in reports" onClick={() => showDetail("Cash shortfall", "Required reserves not covered by available cash. Online payments remain untouched.", [["Cash shortfall", rangeSetAside.summary.shortfall == null ? "Unable to calculate" : formatCurrency(rangeSetAside.summary.shortfall)]])} />
-            <SetAsideShareCard
-              label="To Stash"
-              target={rangeSetAsideShares.toStash.target}
-              canSetAside={rangeSetAsideShares.toStash.canSetAside}
-              showActual
-              actual={rangeActualToStashTotal}
-              actualLabel="Actual total to Stash"
-              actualComparisonAvailable={rangeActualComplete}
-              hint="Online plus cash left after reserves"
-              onClick={() => showDetail("To Stash", "Target compared with untouched online payments plus cash remaining after all reserve shares.", [["Target", rangeSetAsideShares.toStash.target == null ? "Unable to calculate" : formatCurrency(rangeSetAsideShares.toStash.target)], ["Can set aside", rangeSetAsideShares.toStash.canSetAside == null ? "Unable to calculate" : formatCurrency(rangeSetAsideShares.toStash.canSetAside)], ["GCash", formatCurrency(metricsOnlineBreakdown.gcashPayments)], ["Maya", formatCurrency(metricsOnlineBreakdown.mayaPayments)], ...(metricsOnlineBreakdown.otherOnlinePayments > 0 ? [["Other online", formatCurrency(metricsOnlineBreakdown.otherOnlinePayments)] as [string, string]] : []), ["Cash after reserves", rangeSetAsideShares.toStash.cashAfterReserves == null ? "Unable to calculate" : formatCurrency(rangeSetAsideShares.toStash.cashAfterReserves)]])}
-            >
-                <StashBreakdown
-                  availableOnlinePayments={rangeSetAside.summary.onlineToStash ?? rangeSetAsideShares.toStash.onlinePayments}
-                  gcashPayments={metricsOnlineBreakdown.gcashPayments}
-                  mayaPayments={metricsOnlineBreakdown.mayaPayments}
-                  otherOnlinePayments={metricsOnlineBreakdown.otherOnlinePayments}
-                  cashAfterSetAside={rangeSetAsideShares.toStash.cashAfterReserves}
-                />
-            </SetAsideShareCard>
-            {(rangeSetAside.summary.actualUnrecordedCycles ?? 0) > 0 ? <Text gridColumn={{ md: "1 / -1" }} color="canvas.700">{rangeSetAside.summary.actualUnrecordedCycles} completed cycle{rangeSetAside.summary.actualUnrecordedCycles === 1 ? " has" : "s have"} no Actual Set Aside record and are shown as Not recorded.</Text> : null}
-          </SimpleGrid>
-        ) : (
-          <Text color="canvas.700">No set-aside calculation is available for this period.</Text>
-        )}
-      </SectionCard>
-
-      <SectionCard eyebrow="Box contents" title="What products are in the box?" collapsible collapseKey="dashboard-box-contents">
-        {visibleProducts.length ? (
-          <Stack spacing={3}>
-            {visibleProducts.map((product) => (
-              <Box key={product.id} as="button" width="100%" textAlign="left" cursor="pointer" borderRadius="24px" bg="canvas.50" p={4} _hover={{ bg: "whiteAlpha.100" }} onClick={() => showDetail(product.displayName, "Current last-known stock and retail value for this product.", [["Last known in box", String(product.lastKnownQuantity ?? 0)], ["Selling price", formatCurrency(product.currentSellingPrice)], ["Product total", formatCurrency((product.lastKnownQuantity ?? 0) * product.currentSellingPrice)], ["Estimated remaining", String(product.estimatedRemaining ?? "Not enough history")]], "/products", "View product catalog")}>
-                <HStack justify="space-between" align="start" spacing={4}>
-                  <Box>
-                    <Text fontWeight="800">{product.displayName}</Text>
-                    <Text color="canvas.700" mt={1}>
-                      Last known in box: {product.lastKnownQuantity ?? 0}
-                    </Text>
-                    <Text color="canvas.700" mt={1}>
-                      Sell {formatCurrency(product.currentSellingPrice)}
-                      {product.estimatedRemaining != null
-                        ? ` • Estimated remaining ${product.estimatedRemaining}`
-                        : ""}
-                    </Text>
-                  </Box>
-                  <Box textAlign="right" minW="120px">
-                    <Text fontSize="sm" color="canvas.700">
-                      Product total
-                    </Text>
-                    <Text fontWeight="800">
-                      {formatCurrency((product.lastKnownQuantity ?? 0) * product.currentSellingPrice)}
-                    </Text>
-                  </Box>
-                </HStack>
-              </Box>
-            ))}
-          </Stack>
-        ) : (
-          <Text color="canvas.700">No products are loaded into the box right now.</Text>
-        )}
-      </SectionCard>
-
-      <SectionCard eyebrow="Last stock added" title={latestStockEntry ? latestStockEntry.title : "Initial box load"} collapsible collapseKey="dashboard-last-stock">
-        {latestStockEntry ? (
-          <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
-            <MetricCard
-              label="Bottles added"
-              value={formatCount(latestStockEntry.quantity, "bottles")}
-              hint="View stock event"
-              onClick={() => showDetail("Last stock added", "The latest recorded stock addition for this box.", [["Bottles added", formatCount(latestStockEntry.quantity, "bottles")], ["Recorded", formatDateTimeLabel(latestStockEntry.happenedAt)], ["Note", latestStockEntry.subtitle]], "/history", "Open history")}
-            />
-            <MetricCard label="Recorded" value={formatDateTimeLabel(latestStockEntry.happenedAt)} hint="View stock event" onClick={() => showDetail("Stock addition time", "When the latest stock addition was recorded.", [["Recorded", formatDateTimeLabel(latestStockEntry.happenedAt)], ["Bottles", formatCount(latestStockEntry.quantity, "bottles")]], "/history", "Open history")} />
-            <MetricCard label="Note" value={latestStockEntry.subtitle} hint="View stock event" onClick={() => showDetail("Stock addition note", "The note saved with the latest stock addition.", [["Note", latestStockEntry.subtitle], ["Recorded", formatDateTimeLabel(latestStockEntry.happenedAt)]], "/history", "Open history")} />
-          </SimpleGrid>
-        ) : (
-          <Text color="canvas.700">
-            No separate stock-add event yet. Trustally is using your cycle start as the last box load.
-          </Text>
-        )}
-      </SectionCard>
-
-      <SectionCard eyebrow="Outstanding" title="Open balances" collapsible collapseKey="dashboard-outstanding">
-        {outstandingBalances.length ? (
-          <Stack spacing={3}>
-            {outstandingBalances.slice(0, 3).map((balance) => (
-              <Box key={balance.id} as="button" width="100%" textAlign="left" cursor="pointer" borderRadius="24px" bg="canvas.50" p={4} _hover={{ bg: "whiteAlpha.100" }} onClick={() => showDetail(balance.customerLabel?.trim() || balance.cycleLabel, "Open pay-later balance and its saved context.", [["Original amount", formatCurrency(balance.originalAmount)], ["Remaining", formatCurrency(balance.remainingAmount)], ["Status", balance.status], ["Items", balance.itemsSummary?.trim() || "No item summary"]], "/payments", "View payment balances")}>
-                <Text fontWeight="800">
-                  {balance.customerLabel?.trim() || balance.cycleLabel}
-                </Text>
-                <Text color="canvas.700" mt={1}>
-                  Remaining {formatCurrency(balance.remainingAmount)}
-                  {balance.dueDate ? ` • Due ${formatDateTimeLabel(balance.dueDate)}` : ""}
-                </Text>
-                {balance.itemsSummary?.trim() ? (
-                  <Text color="canvas.700" mt={1}>
-                    Items: {balance.itemsSummary}
-                  </Text>
-                ) : null}
-              </Box>
-            ))}
-            <Button as={Link} to="/payments" variant="outline" alignSelf="start">
-              View outstanding payments
-            </Button>
-          </Stack>
-        ) : (
-          <Text color="canvas.700">No open balances right now.</Text>
-        )}
-      </SectionCard>
-
-      <SectionCard eyebrow="Retail value" title="Current box value" collapsible collapseKey="dashboard-retail-value">
-        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-          <MetricCard label="Retail value" value={formatCurrency(retailValue)} hint="View calculation" onClick={() => showDetail("Current retail value", "The selling-price value of all last-known units currently in the box.", [["Tracked units", formatCount(derivedBoxUnits, "units")], ["Retail value", formatCurrency(retailValue)]], "/products", "View products")} />
-          <MetricCard
-            label="Tracked units"
-            value={formatCount(derivedBoxUnits, "units")}
-            hint={
-              dashboard.currentCycle?.estimatedRemaining != null
-                ? `Estimated remaining ${dashboard.currentCycle.estimatedRemaining}`
-                : "Estimated remaining updates after enough history"
-            }
-            onClick={() => showDetail("Tracked units", "The sum of every product's last-known quantity.", [["Tracked units", formatCount(derivedBoxUnits, "units")], ["Estimated remaining", String(dashboard.currentCycle?.estimatedRemaining ?? "Not enough history")]], "/products", "View products")}
-          />
-        </SimpleGrid>
-      </SectionCard>
-
-      <PaymentDetailsModal
-        isOpen={paymentDetailView !== null}
-        onClose={() => setPaymentDetailView(null)}
-        title={paymentDetailView === "cash" ? "Cash payment details" : paymentDetailView === "online" ? "Online payment details" : "Gross sales payment details"}
-        records={metricsPaymentRecords}
-        channel={paymentDetailView === "cash" || paymentDetailView === "online" ? paymentDetailView : undefined}
-      />
-
-      <DateRangeModal
-        isOpen={isDateRangeOpen}
-        onClose={() => setIsDateRangeOpen(false)}
-        startDate={customStartDate}
-        endDate={customEndDate}
-        title="Filter dashboard metrics by date"
-        onApply={(startDate, endDate) => {
-          setCustomStartDate(startDate);
-          setCustomEndDate(endDate);
-          setMetricsRange("custom");
-        }}
-      />
-
-      {displayedRecentSetAside ? <ActualSetAsideModal isOpen={isActualSetAsideOpen} cycle={displayedRecentSetAside} onClose={() => setIsActualSetAsideOpen(false)} onSaved={(saved) => {
-        setRecentSetAside(saved);
-        toast({ title: "Actual set aside saved", description: "This cycle and the Other Products reserve were updated.", status: "success", position: "top" });
-      }}/> : null}
-
-      <Modal isOpen={dashboardDetail !== null} onClose={() => setDashboardDetail(null)} isCentered size="lg">
+      <Modal isOpen={isContentsOpen} onClose={() => setIsContentsOpen(false)} isCentered size="lg">
         <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
-        <ModalContent bg="canvas.100" border="1px solid" borderColor="whiteAlpha.200" borderRadius="28px" mx={4}>
-          <ModalHeader>{dashboardDetail?.title}</ModalHeader>
+        <ModalContent bg="canvas.100" borderRadius="28px" mx={4}>
+          <ModalHeader>Box contents</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            <Text color="canvas.700">{dashboardDetail?.description}</Text>
-            <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3} mt={4}>
-              {dashboardDetail?.values.map(([label, value]) => (
-                <Box key={label} bg="canvas.50" borderRadius="18px" p={3}>
-                  <Text color="canvas.700" fontSize="sm">{label}</Text>
-                  <Text fontWeight="900" mt={1}>{value}</Text>
-                </Box>
+            <Stack spacing={3}>
+              {visibleProducts.map((product) => (
+                <HStack key={product.id} justify="space-between" bg="canvas.50" borderRadius="18px" p={3}>
+                  <Box><Text fontWeight="800">{product.displayName}</Text><Text fontSize="sm" color="canvas.700">{formatCurrency(product.currentSellingPrice)} each</Text></Box>
+                  <Text fontWeight="900">{product.lastKnownQuantity ?? 0}</Text>
+                </HStack>
               ))}
-            </SimpleGrid>
+            </Stack>
+          </ModalBody>
+          <ModalFooter><Button onClick={() => setIsContentsOpen(false)}>Close</Button></ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={Boolean(detail)} onClose={() => setDetail(null)} isCentered>
+        <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
+        <ModalContent bg="canvas.100" borderRadius="28px" mx={4}>
+          <ModalHeader>{detail?.title}</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            {detail?.description ? <Text color="canvas.700" mb={4}>{detail.description}</Text> : null}
+            <Stack spacing={3}>
+              {detail?.values.map(([label, value]) => (
+                <HStack key={label} justify="space-between" align="start"><Text color="canvas.700">{label}</Text><Text fontWeight="800" textAlign="right">{value}</Text></HStack>
+              ))}
+            </Stack>
+            <Text color="canvas.700" fontSize="sm" mt={4}>Reserve credits, calculations, and goal-hit history remain available in Reports.</Text>
           </ModalBody>
           <ModalFooter gap={3}>
-            <Button variant="outline" onClick={() => setDashboardDetail(null)}>Close</Button>
-            {dashboardDetail?.route ? <Button as={Link} to={dashboardDetail.route}>{dashboardDetail.routeLabel ?? "View details"}</Button> : null}
+            <Button as={Link} to={detail?.route ?? "/reports"} variant="outline">{detail?.routeLabel ?? "Open reports"}</Button>
+            <Button onClick={() => setDetail(null)}>Close</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      {setAside ? (
+        <ActualSetAsideModal
+          isOpen={isActualOpen}
+          cycle={setAside}
+          onClose={() => setIsActualOpen(false)}
+          onSaved={(saved) => {
+            setSetAside(saved);
+            setIsActualOpen(false);
+            toast({ title: "Actual set aside saved", status: "success", position: "top" });
+          }}
+        />
+      ) : null}
+
+      <DateRangeModal
+        isOpen={isStashDateOpen}
+        startDate={stashStartDate}
+        endDate={stashEndDate}
+        onClose={() => setIsStashDateOpen(false)}
+        onApply={(startDate, endDate) => {
+          setStashStartDate(startDate);
+          setStashEndDate(endDate);
+          setStashRange("custom");
+          setIsStashDateOpen(false);
+        }}
+      />
     </Stack>
   );
 }
 
-function CompactCycleStat({ label, value }: { label: string; value: string }) {
+function CompactValue({ label, value }: { label: string; value: string }) {
+  return <Box><Text color="canvas.700" fontSize="xs" textTransform="uppercase" letterSpacing="0.12em">{label}</Text><Text fontWeight="900" mt={1}>{value}</Text></Box>;
+}
+
+function MiniValue({ label, value }: { label: string; value: string }) {
+  return <Box minW={0}><Text color="canvas.700" fontSize="xs">{label}</Text><Text fontSize="sm" fontWeight="800" whiteSpace="normal">{value}</Text></Box>;
+}
+
+function CompactTotalCard({ label, value }: { label: string; value: string }) {
   return (
-    <Box px={{ base: 2, md: 3 }} py={2} minW={0}>
-      <Text fontSize="xs" textTransform="uppercase" letterSpacing="0.1em" color="canvas.700" noOfLines={1}>
+    <Box minW={0} bg="canvas.50" borderRadius="22px" p={{ base: 3, sm: 4 }}>
+      <Text color="canvas.700" fontSize="xs" textTransform="uppercase" letterSpacing="0.08em" lineHeight="short">
         {label}
       </Text>
-      <Text mt={1} fontSize={{ base: "md", md: "lg" }} fontWeight="900" color="canvas.900" noOfLines={1}>
+      <Text mt={2} fontSize={{ base: "lg", sm: "2xl" }} fontWeight="900" lineHeight="short" overflowWrap="anywhere">
         {value}
       </Text>
     </Box>
   );
 }
 
-function SwipeableButtonRow({
-  children,
-  ariaLabel,
-  mt,
-  mb,
-}: {
-  children: ReactNode;
-  ariaLabel: string;
-  mt?: number;
-  mb?: number;
-}) {
-  return (
-    <Box
-      role="region"
-      aria-label={ariaLabel}
-      mt={mt}
-      mb={mb}
-      width="100%"
-      maxWidth="100%"
-      minWidth={0}
-      overflowX="auto"
-      overflowY="hidden"
-      overscrollBehaviorX="contain"
-      sx={{
-        WebkitOverflowScrolling: "touch",
-        scrollbarWidth: "none",
-        "&::-webkit-scrollbar": { display: "none" },
-      }}
-    >
-      <HStack spacing={2} display="inline-flex" minWidth="max-content" pr={1}>
-        {children}
-      </HStack>
-    </Box>
-  );
+function moneyOrNotRecorded(value?: number | null) {
+  return value == null ? "Not recorded" : formatCurrency(value);
+}
+
+function progressPercent(actual?: number | null, goal?: number | null) {
+  if (actual == null || goal == null || goal <= 0) return 0;
+  return Math.min((actual / goal) * 100, 100);
+}
+
+function reserveRow(
+  key: string,
+  label: string,
+  goal: number | null | undefined,
+  actual: number | null | undefined,
+  remaining: number | null | undefined,
+  values: Array<[string, string]>,
+): ReserveRow {
+  const resolvedActual = actual ?? null;
+  const resolvedGoal = goal ?? null;
+  return {
+    key,
+    label,
+    goal: resolvedGoal,
+    actual: resolvedActual,
+    remaining: remaining ?? (resolvedActual == null || resolvedGoal == null ? null : Math.max(resolvedGoal - resolvedActual, 0)),
+    detail: { title: label, values },
+  };
 }

@@ -178,6 +178,15 @@ export default function SettingsPage() {
           Electricity is calculated from each cycle’s duration. Product capital is calculated automatically from depleted quantities and the unit costs already saved on each product.
         </Text>
         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+          <Field label="Puresafe reserve goal">
+            <Input value={String(settings.puresafeReserveGoal)} onChange={(event) => setSettings((current) => current ? { ...current, puresafeReserveGoal: Number(event.target.value) || 0 } : current)} inputMode="decimal" type="number" min={0} step="0.01" />
+          </Field>
+          <Field label="Other Products reserve goal">
+            <Input value={String(settings.otherProductsReserveGoal)} onChange={(event) => setSettings((current) => current ? { ...current, otherProductsReserveGoal: Number(event.target.value) || 0 } : current)} inputMode="decimal" type="number" min={0} step="0.01" />
+          </Field>
+          <Field label="Electricity reserve goal">
+            <Input value={String(settings.electricityReserveGoal)} onChange={(event) => setSettings((current) => current ? { ...current, electricityReserveGoal: Number(event.target.value) || 0 } : current)} inputMode="decimal" type="number" min={0} step="0.01" />
+          </Field>
           <Field label="Electricity cost per hour">
             <Input
               value={String(settings.electricityCostPerHour)}

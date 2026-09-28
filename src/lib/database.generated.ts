@@ -81,6 +81,7 @@ export interface DisclosureCollectionDatabaseTypes {
         p_category?: ExpenseCategory;
         p_description?: string | null;
         p_amount?: string;
+        p_reserve_paid_from?: string | null;
       };
       Returns: Expense;
     };
@@ -137,6 +138,14 @@ export interface DisclosureCollectionDatabaseTypes {
         p_actual_other_products_capital: string;
         p_actual_electricity_share: string;
         p_actual_contingency: string;
+        p_credit_puresafe_capital: string;
+        p_credit_other_products_capital: string;
+        p_credit_electricity_share: string;
+        p_credit_contingency: string;
+        p_cleared_puresafe_credit: string;
+        p_cleared_other_products_credit: string;
+        p_cleared_electricity_credit: string;
+        p_cleared_contingency_credit: string;
         p_actual_to_stash_cash: string;
         p_note?: string | null;
       };
@@ -162,6 +171,8 @@ export interface DisclosureCollectionDatabaseTypes {
         p_closing_change_float: string;
         p_gcash_collected: string;
         p_maya_collected: string;
+        p_unionbank_collected: string;
+        p_bpi_collected: string;
         p_counts: Array<{ productId: string; endingQuantity: string }>;
         p_reason: string;
       };

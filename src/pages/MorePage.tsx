@@ -1,78 +1,64 @@
-import { Button, SimpleGrid, Stack, Text } from "@chakra-ui/react";
+import { Box, Button, HStack, Stack, Text } from "@chakra-ui/react";
 import { Link } from "react-router-dom";
 import { SectionCard } from "../components/SectionCard";
 
+const tools = [
+  {
+    title: "Products",
+    description: "Products, prices, costs, and stock.",
+    actions: [
+      { label: "Manage products", to: "/products" },
+      { label: "Add stock", to: "/stock" },
+    ],
+  },
+  {
+    title: "Expenses",
+    description: "Record expenses and review break-even progress.",
+    actions: [{ label: "Open expenses", to: "/expenses" }],
+  },
+  {
+    title: "Late payments",
+    description: "Record amounts owed or payments received later.",
+    actions: [
+      { label: "Record amount owed", to: "/pay-later" },
+      { label: "Record payment", to: "/payments" },
+    ],
+  },
+  {
+    title: "Cash movements",
+    description: "Record cash removed, returned, or corrected.",
+    actions: [{ label: "Open cash movements", to: "/cash-movements" }],
+  },
+  {
+    title: "Settings",
+    description: "Reserve goals, electricity cost, and reminders.",
+    actions: [{ label: "Open settings", to: "/settings" }],
+  },
+  {
+    title: "Exports",
+    description: "Detailed reports, CSV files, and printable records.",
+    actions: [{ label: "Open exports", to: "/reports/business" }],
+  },
+];
+
 export default function MorePage() {
   return (
-    <Stack spacing={5}>
-      <SectionCard eyebrow="More" title="Manage your box">
-        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-          <ActionCard
-            title="Products"
-            description="Edit product details, archive products, and preserve price history."
-            to="/products"
-          />
-          <ActionCard
-            title="Record pay-later"
-            description="Log message-based “I took bottles, I’ll pay later” updates right away."
-            to="/pay-later"
-          />
-          <ActionCard
-            title="Outstanding payments"
-            description="Review open pay-later balances and record bulk or delayed payments."
-            to="/payments"
-          />
-          <ActionCard
-            title="Cash movements"
-            description="Record cash removed, returned, or corrected without affecting revenue."
-            to="/cash-movements"
-          />
-          <ActionCard
-            title="Expenses & break-even"
-            description="Record business expenses and see your break-even progress and projected date."
-            to="/expenses"
-          />
-          <ActionCard
-            title="Add stock"
-            description="Record bottles you physically add while a cycle is active."
-            to="/stock"
-          />
-          <ActionCard
-            title="Historical data"
-            description="Browse completed cycles, stock changes, and adjustments."
-            to="/history"
-          />
-          <ActionCard
-            title="Settings"
-            description="Adjust coverage targets, reminders, and collection thresholds."
-            to="/settings"
-          />
-          <ActionCard
-            title="Initial setup"
-            description="Use setup again only if you’re starting a brand-new honesty box."
-            to="/setup"
-          />
-        </SimpleGrid>
-      </SectionCard>
-    </Stack>
-  );
-}
-
-function ActionCard({
-  title,
-  description,
-  to,
-}: {
-  title: string;
-  description: string;
-  to: string;
-}) {
-  return (
-    <SectionCard title={title}>
-      <Text color="canvas.700">{description}</Text>
-      <Button as={Link} to={to} mt={4}>
-        Open
-      </Button>
+    <SectionCard eyebrow="More" title="Tools and settings">
+      <Stack spacing={3}>
+        {tools.map((tool) => (
+          <Box key={tool.title} bg="canvas.50" borderRadius="22px" p={4}>
+            <Text fontWeight="900">{tool.title}</Text>
+            <Text color="canvas.700" fontSize="sm" mt={1}>{tool.description}</Text>
+            <HStack mt={3} spacing={2} overflowX="auto" pb={1}>
+              {tool.actions.map((action) => (
+                <Button as={Link} to={action.to} key={action.to} size="sm" variant="outline" flexShrink={0}>
+                  {action.label}
+                </Button>
+              ))}
+            </HStack>
+          </Box>
+        ))}
+      </Stack>
     </SectionCard>
   );
 }
