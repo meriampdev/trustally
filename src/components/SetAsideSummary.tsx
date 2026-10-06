@@ -16,6 +16,8 @@ export function SetAsideSummary({ value, onMetricClick, onRecordActual }: { valu
   const showActual = !value.isEstimate;
   const totalTargets = shares.puresafe.target == null || shares.otherProducts.target == null || shares.toStash.target == null
     ? null : shares.puresafe.target + shares.otherProducts.target + shares.electricity.target + shares.contingency.target + shares.toStash.target;
+  const bpiUnionbankReserveFunding = (value.unionbankPayments ?? 0) + (value.bpiPayments ?? 0);
+  const cashToSetAside = value.cashAvailableAfterChangeFloat + bpiUnionbankReserveFunding;
 
   return (
     <Stack spacing={4}>
@@ -28,7 +30,7 @@ export function SetAsideSummary({ value, onMetricClick, onRecordActual }: { valu
         <MetricCard label="Closing reserve" value={reserve?.closingBalance == null ? "Not tracked yet" : formatCurrency(reserve.closingBalance)} hint={reserve?.openingBalance == null ? undefined : `${formatCurrency(reserve.openingBalance)} opening`} />
       </SimpleGrid> : null}
       <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={4}>
-        <MetricCard label="Cash available for reserves" value={formatCurrency(value.cashAvailableAfterChangeFloat)} hint="After preserving the change float" onClick={onMetricClick ? () => onMetricClick("cashAvailableAfterChangeFloat") : undefined} />
+        <MetricCard label="Cash to set aside" value={formatCurrency(cashToSetAside)} hint={`Physical cash ${formatCurrency(value.cashAvailableAfterChangeFloat)} + BPI/UnionBank ${formatCurrency(bpiUnionbankReserveFunding)}`} onClick={onMetricClick ? () => onMetricClick("cashAvailableAfterChangeFloat") : undefined} />
         <SetAsideShareCard label="Puresafe Capital" target={shares.puresafe.target} canSetAside={shares.puresafe.canSetAside} showActual={showActual} actual={actual ? actual.puresafeCapital + (actual.creditPuresafeCapital ?? 0) : null} actualLabel="Actual funded" onClick={onMetricClick ? () => onMetricClick("puresafeCapital") : undefined}>
           {actual ? <Text>{formatCurrency(actual.puresafeCapital)} physical · {formatCurrency(actual.creditPuresafeCapital ?? 0)} credit</Text> : null}
           {value.fundBalances ? <ReserveBalanceLine value={value.fundBalances.puresafe} /> : null}
@@ -108,7 +110,7 @@ export function SetAsideSummary({ value, onMetricClick, onRecordActual }: { valu
         {(value.contingencyCapital ?? 0) > 0 ? <Text color="canvas.700" mt={1}>Redirected to contingency: {formatCurrency(value.contingencyCapital)}</Text> : null}
         {cashAfterSetAside != null ? (
           <Stack spacing={1} mt={2} color="canvas.700">
-            <Text>Cash after set aside: {formatCurrency(cashAfterSetAside)} · GCash directly to Stash: {formatCurrency(value.gcashPayments ?? 0)} · Eligible online reserve funding: {formatCurrency(value.eligibleOnlineReservePayments ?? 0)}</Text>
+            <Text>Cash after set aside: {formatCurrency(cashAfterSetAside)} · BPI/UnionBank added to set-aside: {formatCurrency(bpiUnionbankReserveFunding)} · GCash directly to Stash: {formatCurrency(value.gcashPayments ?? 0)} · Eligible online reserve funding: {formatCurrency(value.eligibleOnlineReservePayments ?? 0)}</Text>
           </Stack>
         ) : null}
       </Box>

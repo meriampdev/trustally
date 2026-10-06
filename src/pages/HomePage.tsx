@@ -34,7 +34,7 @@ import {
   fetchReportSetAside,
 } from "../lib/api";
 import { formatCurrency, formatDateTimeLabel, formatDurationFromNow } from "../lib/format";
-import { formatReportDateRange } from "../lib/reportRange";
+import { formatReportDateRange, getDefaultReportDateRange } from "../lib/reportRange";
 import { calculateSetAsideShareComparison, summarizeOnlinePayments } from "../lib/setAside";
 import type { ReportRangeKey } from "../lib/reportRange";
 import type { CyclePaymentDetail, CycleSetAside, HomeDashboard, Product, ReportSetAside, ReserveKind } from "../lib/types";
@@ -83,6 +83,7 @@ export default function HomePage() {
   const [stashStartDate, setStashStartDate] = useState("");
   const [stashEndDate, setStashEndDate] = useState("");
   const [stashReport, setStashReport] = useState<ReportSetAside | null>(null);
+  const [reserveHistory, setReserveHistory] = useState<ReportSetAside | null>(null);
   const [isStashLoading, setIsStashLoading] = useState(false);
   const [stashError, setStashError] = useState("");
   const [isStashDateOpen, setIsStashDateOpen] = useState(false);
@@ -123,14 +124,16 @@ export default function HomePage() {
     setIsLoading(true);
     setErrorMessage("");
     try {
-      const [nextDashboard, nextProducts, checks] = await Promise.all([
+      const [nextDashboard, nextProducts, checks, nextReserveHistory] = await Promise.all([
         fetchHomeDashboard(currentLocationId),
         fetchProducts(),
         fetchHistoryFeed("box_checks", 1, 0),
+        fetchReportSetAside("custom", "2000-01-01", getDefaultReportDateRange().endDate),
       ]);
       setDashboard(nextDashboard);
       setProducts(nextProducts);
       setLastCheckedAt(nextDashboard.currentCycle?.lastCheckedAt ?? checks[0]?.happenedAt ?? null);
+      setReserveHistory(nextReserveHistory);
 
       if (nextDashboard.recentResult?.cycleId) {
         const [nextPayments, nextSetAside] = await Promise.all([
@@ -466,11 +469,15 @@ export default function HomePage() {
           currentCash={selectedReserve.actual ?? 0}
           cycle={setAside}
           cycleTarget={selectedReserve.cycleTarget}
+          history={reserveHistory?.cycles ?? []}
           locationId={currentLocationId}
           onClose={() => setSelectedReserve(null)}
-          onSaved={async (saved) => {
+          onSaved={async (saved, correctedFunds) => {
             if (saved) setSetAside(saved);
             await load();
+            if (correctedFunds) {
+              setSetAside((current) => current ? { ...current, fundBalances: correctedFunds } : current);
+            }
             toast({ title: `${selectedReserve.label} cash updated`, status: "success", position: "top" });
           }}
         />
@@ -480,6 +487,7 @@ export default function HomePage() {
         <StashRecordModal
           isOpen={isStashRecordOpen}
           cycle={setAside}
+          history={reserveHistory?.cycles ?? []}
           onClose={() => setIsStashRecordOpen(false)}
           onSaved={(saved) => {
             setSetAside(saved);

@@ -17,9 +17,10 @@ import {
   Textarea,
 } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
-import { reconcileReserveCash, saveCycleSetAsideActual, saveExpense } from "../lib/api";
-import { formatCurrency, parseNumberInput } from "../lib/format";
+import { fetchCycleSetAside, reconcileReserveCash, saveCycleSetAsideActual, saveExpense } from "../lib/api";
+import { formatCurrency, formatDateTimeLabel, parseNumberInput } from "../lib/format";
 import { getDefaultReportDateRange } from "../lib/reportRange";
+import { calculateSetAsideShareComparison } from "../lib/setAside";
 import type { CycleSetAside, ExpenseCategory, ReserveKind } from "../lib/types";
 
 interface Props {
@@ -29,12 +30,13 @@ interface Props {
   currentCash: number;
   cycle: CycleSetAside;
   cycleTarget: number | null;
+  history: CycleSetAside[];
   locationId: string;
   onClose: () => void;
-  onSaved: (cycle?: CycleSetAside) => void | Promise<void>;
+  onSaved: (cycle?: CycleSetAside, fundBalances?: CycleSetAside["fundBalances"]) => void | Promise<void>;
 }
 
-export function ReserveCashModal({ isOpen, reserveKind, label, currentCash, cycle, cycleTarget, locationId, onClose, onSaved }: Props) {
+export function ReserveCashModal({ isOpen, reserveKind, label, currentCash, cycle, cycleTarget, history, locationId, onClose, onSaved }: Props) {
   const [mode, setMode] = useState<"cycle" | "balance" | "use">("cycle");
   const [amount, setAmount] = useState("");
   const [occurredOn, setOccurredOn] = useState(getDefaultReportDateRange().endDate);
@@ -70,11 +72,15 @@ export function ReserveCashModal({ isOpen, reserveKind, label, currentCash, cycl
     setError("");
     try {
       if (mode === "cycle") {
-        const saved = await saveCycleSetAsideActual(cycleActualInput(cycle, reserveKind, amount, note));
+        // Re-read before writing because this endpoint updates the complete
+        // actual record. This prevents an old modal snapshot from changing a
+        // different reserve when only one reserve is being edited.
+        const latestCycle = await fetchCycleSetAside(cycle.cycleId);
+        const saved = await saveCycleSetAsideActual(cycleActualInput(latestCycle, reserveKind, amount, note));
         await onSaved(saved);
       } else if (mode === "balance") {
-        await reconcileReserveCash({ reserveKind, cashOnHand: amount, note });
-        await onSaved();
+        const funds = await reconcileReserveCash({ reserveKind, cashOnHand: amount, note });
+        await onSaved(undefined, funds);
       } else {
         await saveExpense({
           locationId,
@@ -95,6 +101,9 @@ export function ReserveCashModal({ isOpen, reserveKind, label, currentCash, cycl
   }
 
   const recordedForCycle = cyclePhysicalAmount(cycle, reserveKind);
+  const recordedHistory = [...history]
+    .filter((item) => item.actualSetAside != null)
+    .sort((left, right) => new Date(right.completedAt ?? right.startedAt).getTime() - new Date(left.completedAt ?? left.startedAt).getTime());
   const projectedCash = mode === "cycle"
     ? Math.max(currentCash - recordedForCycle + parseNumberInput(amount), 0)
     : mode === "balance"
@@ -102,7 +111,7 @@ export function ReserveCashModal({ isOpen, reserveKind, label, currentCash, cycl
       : Math.max(currentCash - parseNumberInput(amount), 0);
 
   return (
-    <Modal isOpen={isOpen} onClose={() => !isSaving && onClose()} isCentered>
+    <Modal isOpen={isOpen} onClose={() => !isSaving && onClose()} isCentered size="lg" scrollBehavior="inside">
       <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
       <ModalContent bg="canvas.100" borderRadius="28px" mx={4}>
         <ModalHeader>{label} cash</ModalHeader>
@@ -137,6 +146,26 @@ export function ReserveCashModal({ isOpen, reserveKind, label, currentCash, cycl
             </FormControl>
             <Text color="canvas.700">Cash after saving: <strong>{formatCurrency(projectedCash)}</strong></Text>
             {error ? <Text color="caution.500">{error}</Text> : null}
+            <Box>
+              <Text fontWeight="900">Recorded set-aside history</Text>
+              {recordedHistory.length ? (
+                <Stack spacing={2} mt={3}>
+                  {recordedHistory.map((item) => {
+                    const itemTarget = cycleTargetFor(item, reserveKind);
+                    return (
+                      <HStack key={item.cycleId} justify="space-between" align="start" bg="canvas.50" borderRadius="18px" p={3}>
+                        <Box minW={0}>
+                          <Text fontWeight="800">Cycle #{item.cycleNumber}</Text>
+                          <Text color="canvas.700" fontSize="sm">{formatDateTimeLabel(item.completedAt)}</Text>
+                          <Text color="canvas.700" fontSize="sm">Target {itemTarget == null ? "unavailable" : formatCurrency(itemTarget)}</Text>
+                        </Box>
+                        <Text fontWeight="900" flexShrink={0}>{formatCurrency(cyclePhysicalAmount(item, reserveKind))}</Text>
+                      </HStack>
+                    );
+                  })}
+                </Stack>
+              ) : <Text color="canvas.700" mt={2}>No recorded set-aside amounts yet.</Text>}
+            </Box>
           </Stack>
         </ModalBody>
         <ModalFooter gap={3}>
@@ -146,6 +175,14 @@ export function ReserveCashModal({ isOpen, reserveKind, label, currentCash, cycl
       </ModalContent>
     </Modal>
   );
+}
+
+function cycleTargetFor(cycle: CycleSetAside, reserveKind: ReserveKind) {
+  const targets = calculateSetAsideShareComparison(cycle);
+  if (reserveKind === "PURESAFE") return targets.puresafe.target;
+  if (reserveKind === "OTHER_PRODUCTS") return targets.otherProducts.target;
+  if (reserveKind === "ELECTRICITY") return targets.electricity.target;
+  return targets.contingency.target;
 }
 
 function cyclePhysicalAmount(cycle: CycleSetAside, reserveKind: ReserveKind) {

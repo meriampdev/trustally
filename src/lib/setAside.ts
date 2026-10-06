@@ -4,6 +4,10 @@ interface SetAsideFunds {
   cashAvailableAfterChangeFloat: number;
   availableOnlinePayments: number;
   eligibleOnlineReservePayments?: number;
+  mayaPayments?: number;
+  unionbankPayments?: number;
+  bpiPayments?: number;
+  legacyBankPayments?: number;
   totalSetAside: number | null;
 }
 
@@ -70,7 +74,13 @@ export function calculateCashOnlySetAside({
 }
 
 export function calculateSetAsideShareComparison(value: SetAsideShareSource): SetAsideShareComparison {
-  let remainingFunding = Math.max(value.cashAvailableAfterChangeFloat, 0) + Math.max(value.eligibleOnlineReservePayments ?? 0, 0);
+  const eligibleOnlineReservePayments = value.eligibleOnlineReservePayments ?? (
+    (value.mayaPayments ?? 0)
+    + (value.unionbankPayments ?? 0)
+    + (value.bpiPayments ?? 0)
+    + (value.legacyBankPayments ?? 0)
+  );
+  let remainingFunding = Math.max(value.cashAvailableAfterChangeFloat, 0) + Math.max(eligibleOnlineReservePayments, 0);
 
   const puresafeCanSetAside = value.puresafeCapital == null
     ? null
@@ -96,7 +106,7 @@ export function calculateSetAsideShareComparison(value: SetAsideShareSource): Se
   const totalReserveTarget = value.puresafeCapital == null || value.miscCapital == null
     ? null
     : value.puresafeCapital + value.electricityShare + value.miscCapital + contingencyTarget;
-  const result = calculateCashOnlySetAside({ ...value, totalSetAside: totalReserveTarget });
+  const result = calculateCashOnlySetAside({ ...value, eligibleOnlineReservePayments, totalSetAside: totalReserveTarget });
   const targetToStash = result.remainingEarnings;
   const cashAfterReserves = contingencyCanSetAside == null ? null : result.cashAfterSetAside;
 

@@ -17,18 +17,19 @@ import {
 } from "@chakra-ui/react";
 import { useEffect, useMemo, useState } from "react";
 import { saveCycleSetAsideActual } from "../lib/api";
-import { formatCurrency, parseNumberInput } from "../lib/format";
+import { formatCurrency, formatDateTimeLabel, parseNumberInput } from "../lib/format";
 import { calculateSetAsideShareComparison } from "../lib/setAside";
 import type { CycleSetAside } from "../lib/types";
 
 interface Props {
   isOpen: boolean;
   cycle: CycleSetAside;
+  history: CycleSetAside[];
   onClose: () => void;
   onSaved: (cycle: CycleSetAside) => void;
 }
 
-export function StashRecordModal({ isOpen, cycle, onClose, onSaved }: Props) {
+export function StashRecordModal({ isOpen, cycle, history, onClose, onSaved }: Props) {
   const [cash, setCash] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
@@ -55,6 +56,9 @@ export function StashRecordModal({ isOpen, cycle, onClose, onSaved }: Props) {
     : 0, [actual]);
   const onlineToStash = actual?.onlineToStash ?? cycle.onlineToStash ?? 0;
   const availableForStash = Math.max(cycle.cashAvailableAfterChangeFloat - reservePhysical, 0);
+  const recordedHistory = [...history]
+    .filter((item) => item.actualSetAside != null)
+    .sort((left, right) => new Date(right.completedAt ?? right.startedAt).getTime() - new Date(left.completedAt ?? left.startedAt).getTime());
 
   async function save() {
     const amount = parseNumberInput(cash);
@@ -96,7 +100,7 @@ export function StashRecordModal({ isOpen, cycle, onClose, onSaved }: Props) {
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={() => !isSaving && onClose()} isCentered>
+    <Modal isOpen={isOpen} onClose={() => !isSaving && onClose()} isCentered size="lg" scrollBehavior="inside">
       <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
       <ModalContent bg="canvas.100" borderRadius="28px" mx={4}>
         <ModalHeader>Record To Stash</ModalHeader>
@@ -121,6 +125,21 @@ export function StashRecordModal({ isOpen, cycle, onClose, onSaved }: Props) {
             </FormControl>
             <Text>Total To Stash: <strong>{formatCurrency(parseNumberInput(cash) + onlineToStash)}</strong></Text>
             {error ? <Text color="caution.500">{error}</Text> : null}
+            <Box>
+              <Text fontWeight="900">Recorded To Stash history</Text>
+              {recordedHistory.length ? (
+                <Stack spacing={2} mt={3}>
+                  {recordedHistory.map((item) => (
+                    <Box key={item.cycleId} bg="canvas.50" borderRadius="18px" p={3}>
+                      <Text fontWeight="800">Cycle #{item.cycleNumber}</Text>
+                      <Text color="canvas.700" fontSize="sm">{formatDateTimeLabel(item.completedAt)}</Text>
+                      <Text color="canvas.700" fontSize="sm">Cash {formatCurrency(item.actualSetAside?.toStashCash ?? 0)} · Online {formatCurrency(item.actualSetAside?.onlineToStash ?? item.onlineToStash ?? 0)}</Text>
+                      <Text fontWeight="900" mt={1}>{formatCurrency(item.actualSetAside?.toStashTotal ?? 0)} total</Text>
+                    </Box>
+                  ))}
+                </Stack>
+              ) : <Text color="canvas.700" mt={2}>No recorded To Stash amounts yet.</Text>}
+            </Box>
           </Stack>
         </ModalBody>
         <ModalFooter gap={3}>

@@ -2,6 +2,13 @@ import {
   Box,
   Button,
   HStack,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
   SimpleGrid,
   Spinner,
   Stack,
@@ -14,7 +21,7 @@ import { DateRangeModal } from "../components/DateRangeModal";
 import { MetricCard } from "../components/MetricCard";
 import { SectionCard } from "../components/SectionCard";
 import { fetchReportsSnapshot, fetchReportSetAside } from "../lib/api";
-import { formatCurrency, formatDateTimeLabel, formatPercent } from "../lib/format";
+import { formatCurrency, formatDateRange, formatDateTimeLabel, formatPercent } from "../lib/format";
 import { formatReportDateRange } from "../lib/reportRange";
 import type { ReportRangeKey } from "../lib/reportRange";
 import type { ReportsSnapshot, ReportSetAside } from "../lib/types";
@@ -108,6 +115,7 @@ export default function ReportsPage() {
 }
 
 function ReportContent({ snapshot, setAside }: { snapshot: ReportsSnapshot; setAside: ReportSetAside }) {
+  const [isGapModalOpen, setIsGapModalOpen] = useState(false);
   const actualSetAside = setAside.summary.actualPhysicalTotal;
   const fundBalances = setAside.summary.closingFundBalances ?? setAside.summary.fundBalances;
   const goalHits = setAside.summary.goalHits;
@@ -123,6 +131,47 @@ function ReportContent({ snapshot, setAside }: { snapshot: ReportsSnapshot; setA
           <MetricCard label="Actual set aside" value={actualSetAside == null ? "Not recorded" : formatCurrency(actualSetAside)} />
         </SimpleGrid>
       </SectionCard>
+
+      <SectionCard eyebrow="By cycle" title="Unexplained gap">
+        <HStack justify="space-between" align="center" spacing={4}>
+          <Text color="canvas.700">
+            {snapshot.reportCycles.length ? `${snapshot.reportCycles.length} completed cycle${snapshot.reportCycles.length === 1 ? "" : "s"} in this range.` : "No completed cycles in this date range."}
+          </Text>
+          <Button onClick={() => setIsGapModalOpen(true)} isDisabled={!snapshot.reportCycles.length} flexShrink={0}>View by cycle</Button>
+        </HStack>
+      </SectionCard>
+
+      <Modal isOpen={isGapModalOpen} onClose={() => setIsGapModalOpen(false)} isCentered size="lg" scrollBehavior="inside">
+        <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
+        <ModalContent bg="canvas.100" borderRadius="28px" mx={4}>
+          <ModalHeader>Unexplained gap by cycle</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Stack spacing={3}>
+              {snapshot.reportCycles.map((cycle) => (
+                <Box key={cycle.cycleId} bg="canvas.50" borderRadius="20px" p={4}>
+                  <HStack justify="space-between" align="start" spacing={4}>
+                    <Box minW={0}>
+                      <Text fontWeight="900">{cycle.label}</Text>
+                      <Text color="canvas.700" fontSize="sm" mt={1}>{formatDateRange(cycle.startedAt, cycle.completedAt)}</Text>
+                    </Box>
+                    <Text fontWeight="900" color={cycle.unaccountedAmount > 0 ? "caution.400" : "canvas.900"} flexShrink={0}>
+                      {formatCurrency(cycle.unaccountedAmount)}
+                    </Text>
+                  </HStack>
+                  <HStack mt={3} spacing={4} color="canvas.700" fontSize="sm" flexWrap="wrap">
+                    <Text>Expected {formatCurrency(cycle.expectedRevenue)}</Text>
+                    <Text>Collected {formatCurrency(cycle.totalPayments)}</Text>
+                    <Text>Known pay-later {formatCurrency(cycle.knownPayLater)}</Text>
+                  </HStack>
+                  <Button as={Link} to={`/history/${cycle.cycleId}`} size="sm" variant="ghost" mt={2} onClick={() => setIsGapModalOpen(false)}>View cycle</Button>
+                </Box>
+              ))}
+            </Stack>
+          </ModalBody>
+          <ModalFooter><Button onClick={() => setIsGapModalOpen(false)}>Close</Button></ModalFooter>
+        </ModalContent>
+      </Modal>
 
       <SectionCard title="Sales and payments" collapsible collapseKey="reports-sales-payments" defaultExpanded={false}>
         <DetailRows rows={[
