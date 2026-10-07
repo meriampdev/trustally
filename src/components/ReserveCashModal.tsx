@@ -33,7 +33,7 @@ interface Props {
   history: CycleSetAside[];
   locationId: string;
   onClose: () => void;
-  onSaved: (cycle?: CycleSetAside, fundBalances?: CycleSetAside["fundBalances"]) => void | Promise<void>;
+  onSaved: (cycle?: CycleSetAside, fundBalances?: CycleSetAside["fundBalances"], correctedCashOnHand?: number) => void | Promise<void>;
 }
 
 export function ReserveCashModal({ isOpen, reserveKind, label, currentCash, cycle, cycleTarget, history, locationId, onClose, onSaved }: Props) {
@@ -59,7 +59,7 @@ export function ReserveCashModal({ isOpen, reserveKind, label, currentCash, cycl
       setError(mode === "use" ? "Enter an amount greater than zero." : "Enter an amount of zero or greater.");
       return;
     }
-    if (mode !== "cycle" && !note.trim()) {
+    if (mode === "use" && !note.trim()) {
       setError("Add a short reason or note.");
       return;
     }
@@ -79,8 +79,12 @@ export function ReserveCashModal({ isOpen, reserveKind, label, currentCash, cycl
         const saved = await saveCycleSetAsideActual(cycleActualInput(latestCycle, reserveKind, amount, note));
         await onSaved(saved);
       } else if (mode === "balance") {
-        const funds = await reconcileReserveCash({ reserveKind, cashOnHand: amount, note });
-        await onSaved(undefined, funds);
+        const funds = await reconcileReserveCash({
+          reserveKind,
+          cashOnHand: amount,
+          note: note.trim() || "Manual physical cash count correction",
+        });
+        await onSaved(undefined, funds, numericAmount);
       } else {
         await saveExpense({
           locationId,
@@ -140,7 +144,7 @@ export function ReserveCashModal({ isOpen, reserveKind, label, currentCash, cycl
               <Input value={amount} inputMode="decimal" placeholder="0.00" onChange={(event) => setAmount(event.target.value)} />
               {mode === "cycle" ? <Text color="canvas.700" fontSize="sm" mt={1}>Saving changes this cycle’s recorded amount from {formatCurrency(recordedForCycle)} to {formatCurrency(parseNumberInput(amount))}.</Text> : null}
             </FormControl>
-            <FormControl isRequired={mode !== "cycle"}>
+            <FormControl isRequired={mode === "use"}>
               <FormLabel>Reason or note</FormLabel>
               <Textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder={mode === "cycle" ? "Optional note for this cycle" : mode === "balance" ? "Example: Physical cash count correction" : "What was the cash used for?"} />
             </FormControl>

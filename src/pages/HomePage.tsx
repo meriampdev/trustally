@@ -472,11 +472,16 @@ export default function HomePage() {
           history={reserveHistory?.cycles ?? []}
           locationId={currentLocationId}
           onClose={() => setSelectedReserve(null)}
-          onSaved={async (saved, correctedFunds) => {
+          onSaved={async (saved, correctedFunds, correctedCashOnHand) => {
+            const savedFunds = saved?.fundBalances;
             if (saved) setSetAside(saved);
             await load();
-            if (correctedFunds) {
-              setSetAside((current) => current ? { ...current, fundBalances: correctedFunds } : current);
+            const latestFunds = savedFunds ?? correctedFunds;
+            if (latestFunds) {
+              const displayedFunds = correctedCashOnHand == null
+                ? latestFunds
+                : applyReserveCashOverride(latestFunds, selectedReserve.reserveKind, correctedCashOnHand);
+              setSetAside((current) => current ? { ...current, fundBalances: displayedFunds } : current);
             }
             toast({ title: `${selectedReserve.label} cash updated`, status: "success", position: "top" });
           }}
@@ -565,4 +570,15 @@ function reserveRow(
     remaining: remaining ?? (resolvedActual == null || resolvedGoal == null ? null : Math.max(resolvedGoal - resolvedActual, 0)),
     detail: { title: label, values },
   };
+}
+
+function applyReserveCashOverride(
+  funds: NonNullable<CycleSetAside["fundBalances"]>,
+  reserveKind: ReserveKind,
+  cashOnHand: number,
+): NonNullable<CycleSetAside["fundBalances"]> {
+  if (reserveKind === "PURESAFE") return { ...funds, puresafe: { ...funds.puresafe, physicalBalance: cashOnHand, fundedBalance: cashOnHand + funds.puresafe.creditAwaitingCash, balance: cashOnHand + funds.puresafe.creditAwaitingCash } };
+  if (reserveKind === "OTHER_PRODUCTS") return { ...funds, otherProducts: { ...funds.otherProducts, physicalBalance: cashOnHand, fundedBalance: cashOnHand + funds.otherProducts.creditAwaitingCash, balance: cashOnHand + funds.otherProducts.creditAwaitingCash } };
+  if (reserveKind === "ELECTRICITY") return { ...funds, electricity: { ...funds.electricity, physicalBalance: cashOnHand, fundedBalance: cashOnHand + funds.electricity.creditAwaitingCash, balance: cashOnHand + funds.electricity.creditAwaitingCash } };
+  return { ...funds, contingency: { ...funds.contingency, physicalBalance: cashOnHand, fundedBalance: cashOnHand + funds.contingency.creditAwaitingCash, balance: cashOnHand + funds.contingency.creditAwaitingCash } };
 }
